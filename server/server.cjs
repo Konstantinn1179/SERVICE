@@ -10,6 +10,10 @@ const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const path = require('path');
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../dist')));
 
 // Initialize Supabase Client
 const supabaseUrl = process.env.SUPABASE_URL;
