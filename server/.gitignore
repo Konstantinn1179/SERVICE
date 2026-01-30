@@ -9,19 +9,6 @@ lerna-debug.log*
 
 node_modules
 dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
 
 # Environment Variables
 .env
@@ -29,4 +16,4 @@ dist-ssr
 !.env.example
 
 # Google Service Account
-server/service-account.json
+service-account.json

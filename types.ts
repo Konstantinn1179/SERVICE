@@ -1,6 +1,7 @@
+/// <reference types="vite/client" />
 
 export interface Message {
-  role: 'user' | 'model';
+  role: 'user' | 'model' | 'system';
   text: string;
   timestamp: Date;
 }

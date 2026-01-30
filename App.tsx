@@ -20,8 +20,7 @@ import SymptomSelector from './components/SymptomSelector';
 import BookingForm from './components/BookingForm';
 
 // --- CONFIGURATION ---
-// СЮДА ВСТАВИТЬ ССЫЛКУ ОТ TRAE (Cloudflare Worker)
-// Например: "https://auto-service-backend.username.workers.dev"
+// Используем прокси Vite для локальной разработки и относительный путь для продакшена
 const BACKEND_URL = ""; 
 
 // --- STATIC INSTANT ANSWERS (ZERO LATENCY) ---
@@ -226,97 +225,41 @@ function App() {
     handleSendMessage(fullText);
   };
 
-  const handleBookingSubmit = async (name: string, phone: string) => {
-    setShowBookingForm(false);
-    setBookingReady(false); 
-    
-    // 1. Show immediate feedback
-    const confirmMsg: Message = {
-        role: 'model',
-        text: `[STATUS: green] **Заявка оформляется...**\n\n${name}, секунду, формирую отчет для мастера.`,
-        timestamp: new Date()
-    };
-    setMessages(prev => [...prev, confirmMsg]);
+  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string) => {
     setIsLoading(true);
-
     try {
-      // 2. Generate Technical Summary for the Manager
-      const summary = await generateSummary(messages);
+      // 1. Send to Backend
+      const response = await fetch(`${BACKEND_URL}/api/bookings`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            name, 
+            phone, 
+            car_brand: brand, 
+            car_model: model, 
+            year, 
+            reason,
+            booking_date: bookingDate,
+            booking_time: bookingTime
+        })
+      });
 
-      // 3. Construct the Data Payload
-      const bookingPayload = {
-        client: { name, phone },
-        vehicle: vehicleCard,
-        chatHistory: messages,
-        managerSummary: summary,
-        timestamp: new Date().toISOString()
-      };
+      if (!response.ok) {
+          throw new Error('Server error');
+      }
 
-      console.log("%c🚀 SENDING TO BACKEND:", "color: lime; font-size: 14px; font-weight: bold;");
-      console.log(bookingPayload);
+      // 2. Add system message
+      setMessages(prev => [...prev, {
+        role: 'system',
+        text: `✅ Заявка принята!\n\nИмя: ${name}\nТелефон: ${phone}\nАвто: ${brand} ${model} (${year})\nДата: ${bookingDate || 'Не указана'}\nВремя: ${bookingTime || 'Не указано'}\nПричина: ${reason}\n\nМастер свяжется с вами в ближайшее время.`,
+        timestamp: new Date()
+      }]);
       
-      let success = false;
-
-      // --- REAL BACKEND INTEGRATION ---
-      if (BACKEND_URL) {
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/booking`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(bookingPayload)
-            });
-
-            if (response.ok) {
-                success = true;
-            } else {
-                console.error("Server responded with error:", response.status);
-            }
-        } catch (netError) {
-            console.error("Network error sending booking:", netError);
-        }
-      } else {
-        // Fallback for demo without backend
-        console.warn("BACKEND_URL is missing. Simulating success for demo.");
-        
-        // Also try legacy Telegram sendData if available
-        if (telegram) {
-             const minimalPayload = {
-                client: { name, phone },
-                vehicle: vehicleCard,
-                summary: summary
-            };
-            telegram.sendData(JSON.stringify(minimalPayload));
-        }
-        success = true;
-      }
-
-      // 4. Final confirmation to user
-      if (success) {
-          const finalMsg: Message = {
-            role: 'model',
-            text: `[STATUS: green] **Заявка принята!**\n\nМы свяжемся с вами по номеру ${phone} в течение 15 минут.\n\nМастер уже получил информацию о вашем ${vehicleCard.brand || 'авто'}.`,
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, finalMsg]);
-          setStatus('green');
-          
-          // Optional: Close app after delay
-          if (telegram && BACKEND_URL) {
-              setTimeout(() => telegram.close(), 3000);
-          }
-      } else {
-          const errorMsg: Message = {
-            role: 'model',
-            text: `[STATUS: red] **Ошибка отправки.**\n\nНе удалось передать заявку на сервер. Пожалуйста, позвоните нам напрямую: +7 (8332) XX-XX-XX`,
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, errorMsg]);
-          setStatus('red');
-      }
-
+      setShowBookingForm(false);
     } catch (e) {
+      alert('Ошибка при отправке заявки. Попробуйте позже.');
       console.error("Booking error", e);
     } finally {
       setIsLoading(false);
@@ -391,6 +334,7 @@ function App() {
              <SymptomSelector 
                 onSelect={handleMenuSelection} 
                 onCarSelect={() => setShowCarSelector(true)}
+                onBooking={() => setShowBookingForm(true)}
              />
 
              {/* Input Field */}
@@ -485,6 +429,7 @@ function App() {
         {/* Modal for Booking (152-FZ Compliant) */}
         {showBookingForm && (
           <BookingForm 
+            initialName={telegram?.initDataUnsafe?.user?.first_name || ''}
             onSubmit={handleBookingSubmit}
             onCancel={() => setShowBookingForm(false)}
           />

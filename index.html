@@ -4,8 +4,44 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>АКПП-центр Киров | AI Assistant</title>
+    <script>
+      // Global error handler to show errors on screen
+      window.onerror = function(msg, url, line, col, error) {
+        var div = document.createElement('div');
+        div.style.position = 'fixed';
+        div.style.top = '0';
+        div.style.left = '0';
+        div.style.width = '100%';
+        div.style.height = '100%';
+        div.style.backgroundColor = 'black';
+        div.style.color = 'red';
+        div.style.zIndex = '9999';
+        div.style.padding = '20px';
+        div.style.overflow = 'auto';
+        div.style.fontFamily = 'monospace';
+        div.innerHTML = '<h3>Critical Error</h3>' + 
+          '<p>' + msg + '</p>' + 
+          '<p>Line: ' + line + ':' + col + '</p>' + 
+          '<pre>' + (error ? error.stack : 'No stack trace') + '</pre>';
+        document.body.appendChild(div);
+      };
+      
+      // Capture unhandled promise rejections
+      window.addEventListener('unhandledrejection', function(event) {
+        var div = document.createElement('div');
+        div.style.position = 'fixed';
+        div.style.bottom = '0';
+        div.style.left = '0';
+        div.style.width = '100%';
+        div.style.backgroundColor = '#330000';
+        div.style.color = 'yellow';
+        div.style.zIndex = '9999';
+        div.style.padding = '10px';
+        div.innerText = 'Promise Error: ' + event.reason;
+        document.body.appendChild(div);
+      });
+    </script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
       body { font-family: 'Inter', sans-serif; }
@@ -18,16 +54,6 @@
           scrollbar-width: none;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3"
-  }
-}
-</script>
 </head>
   <body class="bg-gray-900 text-gray-100">
     <div id="root"></div>

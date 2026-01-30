@@ -1,0 +1,203 @@
+
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const { createClient } = require('@supabase/supabase-js');
+const { google } = require('googleapis');
+const fs = require('fs');
+
+const TelegramBot = require('node-telegram-bot-api');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Initialize Supabase Client
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Initialize Telegram Bot for notifications
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+const adminChatId = process.env.ADMIN_CHAT_ID;
+const bot = telegramToken ? new TelegramBot(telegramToken, { polling: false }) : null;
+
+// Initialize Google Calendar
+const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const KEY_PATH = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || './service-account.json';
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary';
+
+let calendar = null;
+
+const initCalendar = async () => {
+    try {
+        let auth;
+        // Check if key is provided as JSON string in env var (for cloud deployment)
+        if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+             const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+             auth = new google.auth.GoogleAuth({
+                credentials,
+                scopes: SCOPES,
+            });
+            console.log('Google Calendar API initialized with JSON env var.');
+        } 
+        // Fallback to file path
+        else if (fs.existsSync(KEY_PATH)) {
+            auth = new google.auth.GoogleAuth({
+                keyFile: KEY_PATH,
+                scopes: SCOPES,
+            });
+            console.log('Google Calendar API initialized with key file.');
+        } else {
+            console.log('Google Service Account Key not found (checked env GOOGLE_SERVICE_ACCOUNT_JSON and file ' + KEY_PATH + ')');
+            console.log('Calendar integration will be skipped.');
+            return;
+        }
+
+        calendar = google.calendar({ version: 'v3', auth });
+    } catch (error) {
+        console.error('Failed to initialize Google Calendar:', error.message);
+    }
+};
+
+initCalendar();
+
+// Helper to add event
+const addCalendarEvent = async (booking) => {
+    if (!calendar) return;
+    if (!booking.booking_date || !booking.booking_time) return;
+
+    try {
+        const startDateTime = new Date(`${booking.booking_date}T${booking.booking_time}`);
+        const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
+
+        const event = {
+            summary: `Ремонт АКПП: ${booking.car_brand} ${booking.car_model}`,
+            description: `Имя: ${booking.name}\nТелефон: ${booking.phone}\nПричина: ${booking.reason}`,
+            start: {
+                dateTime: startDateTime.toISOString(),
+                timeZone: 'Europe/Moscow', // Adjust as needed
+            },
+            end: {
+                dateTime: endDateTime.toISOString(),
+                timeZone: 'Europe/Moscow',
+            },
+        };
+
+        const res = await calendar.events.insert({
+            calendarId: CALENDAR_ID,
+            resource: event,
+        });
+        console.log('Event created: %s', res.data.htmlLink);
+        return res.data;
+    } catch (error) {
+        console.error('Error adding to calendar:', error);
+    }
+};
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Routes
+app.get('/', (req, res) => {
+  res.send('АКПП-центр Backend is running!');
+});
+
+// Create a new booking
+app.post('/api/bookings', async (req, res) => {
+    const { name, phone, car_brand, car_model, year, reason, booking_date, booking_time } = req.body;
+
+    // Basic validation
+    if (!name || !phone) {
+        return res.status(400).json({ error: 'Имя и телефон обязательны' });
+    }
+
+    // Combine model and year if year is provided
+    const fullModel = year ? `${car_model} (${year})` : car_model;
+
+    // WORKAROUND: Since 'booking_date' and 'booking_time' columns might not exist in Supabase yet,
+    // we append them to the 'reason' field for storage, but keep them separate for Telegram notifications.
+    let storedReason = reason || '';
+    if (booking_date) storedReason += `\n📅 Дата: ${booking_date}`;
+    if (booking_time) storedReason += `\n⏰ Время: ${booking_time}`;
+
+    const { data, error } = await supabase
+        .from('car_bookings')
+        .insert([
+            { 
+                name, 
+                phone, 
+                car_brand, 
+                car_model: fullModel, 
+                reason: storedReason
+                // Removed explicit booking_date/time columns to avoid schema errors
+            }
+        ])
+        .select();
+
+    if (error) {
+        console.error('Supabase error:', error);
+        // Fallback: If error is about missing columns, try inserting without date/time (optional safety)
+        // For now, return error so user knows to update DB
+        return res.status(500).json({ error: error.message });
+    }
+
+    // Send Telegram Notification
+    if (bot && adminChatId) {
+        const dateStr = booking_date ? `\n📅 <b>Дата:</b> ${booking_date}` : '';
+        const timeStr = booking_time ? `\n⏰ <b>Время:</b> ${booking_time}` : '';
+        
+        const message = `🔔 <b>Новая заявка!</b>\n\n👤 <b>Имя:</b> ${name}\n📱 <b>Телефон:</b> ${phone}\n🚗 <b>Авто:</b> ${car_brand} ${fullModel}${dateStr}${timeStr}\n🔧 <b>Причина:</b> ${reason || 'Не указана'}`;
+        try {
+            await bot.sendMessage(adminChatId, message, { parse_mode: 'HTML' });
+            console.log('Telegram notification sent to', adminChatId);
+        } catch (botError) {
+            console.error('Failed to send Telegram notification:', botError.message);
+        }
+    } else {
+        console.log('Telegram bot or ADMIN_CHAT_ID not configured. Skipping notification.');
+    }
+
+    // Add to Google Calendar
+    if (booking_date && booking_time) {
+        await addCalendarEvent({ 
+            name, 
+            phone, 
+            car_brand, 
+            car_model: fullModel, 
+            reason, 
+            booking_date, 
+            booking_time 
+        });
+    }
+
+    res.status(201).json({ success: true, data });
+});
+
+// Test DB Connection
+app.get('/api/test-db', async (req, res) => {
+    const { data, error } = await supabase
+        .from('car_bookings')
+        .select('*')
+        .limit(1);
+    
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+    res.json({ message: "Connected to Supabase!", data });
+});
+
+// Telegram Auth Check Endpoint (Placeholder)
+app.post('/api/auth/telegram', (req, res) => {
+    // TODO: Implement real hash verification
+    const { initData } = req.body;
+    console.log("Received initData:", initData);
+    
+    // Mock success for now
+    res.json({ success: true, user: { id: 12345, name: "Test User" } });
+});
+
+// Start Server
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

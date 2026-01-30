@@ -12,10 +12,23 @@ import { Message, VehicleCard, ClassifierResult, BookingStatus, INITIAL_VEHICLE_
 // На хостингах (Cloudflare/Vercel) переменные process.env часто требуют сложной настройки сборщика.
 // Чтобы приложение 100% заработало у клиента прямо сейчас, вставь свой ключ в кавычки ниже.
 // ПОСЛЕ ДЕМО НЕ ЗАБУДЬ УБРАТЬ!
-const HARDCODED_KEY = ""; // <--- ВСТАВЬ СЮДА СВОЙ КЛЮЧ GEMINI (начинается с AIza...)
+const HARDCODED_KEY = import.meta.env.VITE_API_KEY || ""; // Используем переменную окружения
 
-const apiKey = HARDCODED_KEY || process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+const apiKey = HARDCODED_KEY;
+
+// Lazy init to avoid top-level crashes
+let aiInstance: GoogleGenAI | null = null;
+
+const getAI = () => {
+  if (!aiInstance) {
+    if (!apiKey) {
+      console.error("API Key is missing!");
+      throw new Error("API Key is missing. Please check .env file.");
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+};
 
 const MODEL_NAME = "gemini-3-flash-preview";
 
@@ -41,6 +54,7 @@ export const generateChatResponse = async (history: Message[], isFirstMessage: b
   const previousHistory = isFirstMessage ? [] : formatHistory(history.slice(0, -1));
 
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       config: {
@@ -64,6 +78,7 @@ export interface AnalysisResult {
 
 export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResult> => {
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       config: {
@@ -131,13 +146,14 @@ export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResul
 // 3. Generate Buttons (Background)
 export const generateButtons = async (history: Message[]): Promise<string[]> => {
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       config: {
         systemInstruction: BUTTONS_PROMPT,
         responseMimeType: "application/json",
         responseSchema: {
-            type: Type.OBJECT,
+          type: Type.OBJECT,
             properties: {
                 buttons: { type: Type.ARRAY, items: { type: Type.STRING } }
             }
@@ -157,16 +173,17 @@ export const generateButtons = async (history: Message[]): Promise<string[]> => 
 // 4. Generate Technical Summary
 export const generateSummary = async (history: Message[]): Promise<string> => {
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       config: {
         systemInstruction: SUMMARY_PROMPT,
       },
-      contents: formatHistory(history)
+      contents: [{ role: 'user', parts: [{ text: JSON.stringify(history) }] }]
     });
-    return response.text || "Не удалось создать отчет.";
-  } catch (e) {
-    console.error("Summary Generation Error", e);
-    return "Ошибка генерации отчета.";
+    return response.text || "";
+  } catch (error) {
+    console.error("Generate Summary Error:", error);
+    return "";
   }
 };

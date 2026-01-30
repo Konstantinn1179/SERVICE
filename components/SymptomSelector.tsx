@@ -5,6 +5,7 @@ import { COMMON_SYMPTOMS, MAINTENANCE_TYPES, CONSULT_TOPICS, PRICE_ITEMS } from 
 interface Props {
   onSelect: (text: string) => void;
   onCarSelect: () => void;
+  onBooking: () => void;
 }
 
 type MenuLevel = 'main' | 'repair' | 'maintenance' | 'consult' | 'prices';
@@ -27,14 +28,14 @@ const getIcon = (item: string, type: MenuLevel) => {
   if (type === 'maintenance') {
     if (s.includes('масла')) return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />;
     if (s.includes('фильтр')) return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />;
-    return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />;
+    return <><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></>;
   }
 
   // --- CONSULT ICONS ---
   if (type === 'consult') {
     if (s.includes('цены')) return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />;
     if (s.includes('гарантия')) return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />;
-    if (s.includes('где')) return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />;
+    if (s.includes('где')) return <><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></>;
     return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />;
   }
   
@@ -48,7 +49,7 @@ const getIcon = (item: string, type: MenuLevel) => {
   return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />;
 };
 
-const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect }) => {
+const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) => {
   const [level, setLevel] = useState<MenuLevel>('main');
 
   const handleSelection = (item: string) => {
@@ -67,6 +68,21 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect }) => {
       {/* --- LEVEL 1: MAIN CATEGORIES (GRID ON MOBILE) --- */}
       {level === 'main' && (
         <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-2 sm:gap-3">
+          {/* 0. BOOKING (Prominent) */}
+          <button
+            onClick={onBooking}
+            className="flex flex-col items-center justify-center h-20 sm:w-28 sm:h-24 bg-blue-600 hover:bg-blue-500 rounded-xl border border-blue-400 hover:border-blue-300 transition-all active:scale-95 group p-1.5 sm:p-2 text-center shadow-lg shadow-blue-900/50"
+          >
+            <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-blue-800/50 rounded-lg group-hover:bg-blue-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+            </div>
+            <span className="text-[9px] sm:text-[10px] leading-tight text-white font-bold uppercase tracking-wide">
+              Записаться
+            </span>
+          </button>
+
           {/* 1. Car Select */}
           <button
             onClick={onCarSelect}
