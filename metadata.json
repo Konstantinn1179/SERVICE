@@ -1,0 +1,7 @@
+{
+  "name": "AI-AutoService Kirov",
+  "description": "An intelligent AI assistant for the Kirov Automatic Transmission Center, featuring triage logic, vehicle state tracking, and smart scheduling.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
