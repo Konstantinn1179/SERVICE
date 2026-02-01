@@ -118,7 +118,7 @@ export interface AnalysisResult {
 export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResult> => {
   const runAnalysis = async () => {
     // Call our own backend proxy instead of Google directly
-    const response = await fetch('/api/gemini-proxy', {
+    const response = await fetch('/api/ai-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -199,24 +199,30 @@ export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResul
 // 3. Generate Buttons (Background)
 export const generateButtons = async (history: Message[]): Promise<string[]> => {
   try {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: BUTTONS_PROMPT,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-            properties: {
-                buttons: { type: Type.ARRAY, items: { type: Type.STRING } }
-            }
-        }
-      },
-      contents: formatHistory(history)
+    const response = await fetch('/api/ai-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: MODEL_NAME,
+            config: {
+                systemInstruction: BUTTONS_PROMPT,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        buttons: { type: Type.ARRAY, items: { type: Type.STRING } }
+                    }
+                }
+            },
+            contents: formatHistory(history)
+        })
     });
 
-    const data = JSON.parse(response.text || "{}");
-    return Array.isArray(data.buttons) ? data.buttons : [];
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    const parsed = JSON.parse(data.text || "{}");
+    return Array.isArray(parsed.buttons) ? parsed.buttons : [];
   } catch (e) {
     console.error("Buttons Error", e);
     return [];
@@ -226,15 +232,22 @@ export const generateButtons = async (history: Message[]): Promise<string[]> => 
 // 4. Generate Technical Summary
 export const generateSummary = async (history: Message[]): Promise<string> => {
   try {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: SUMMARY_PROMPT,
-      },
-      contents: [{ role: 'user', parts: [{ text: JSON.stringify(history) }] }]
+    const response = await fetch('/api/ai-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: MODEL_NAME,
+            config: {
+                systemInstruction: SUMMARY_PROMPT,
+            },
+            contents: [{ role: 'user', parts: [{ text: JSON.stringify(history) }] }]
+        })
     });
-    return response.text || "";
+
+    if (!response.ok) return "";
+
+    const data = await response.json();
+    return data.text || "";
   } catch (error) {
     console.error("Generate Summary Error:", error);
     return "";

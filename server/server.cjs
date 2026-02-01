@@ -378,8 +378,14 @@ app.post('/api/ai-proxy', async (req, res) => {
                  temperature: 0.7,
              });
 
+             let text = completion.choices[0].message.content;
+             // Remove markdown code blocks if present
+             if (text.trim().startsWith('```')) {
+                 text = text.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
+             }
+
              return res.json({
-                 text: completion.choices[0].message.content
+                 text: text
              });
         }
 
@@ -390,7 +396,14 @@ app.post('/api/ai-proxy', async (req, res) => {
                 config,
                 contents
             });
-            return res.json({ text: response.text() });
+            
+            let text = response.text();
+            // Remove markdown code blocks if present (just in case)
+            if (text.trim().startsWith('```')) {
+                 text = text.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
+            }
+
+            return res.json({ text: text });
         }
 
         throw new Error("No AI client configured (Check OPENROUTER_API_KEY or VITE_API_KEY)");

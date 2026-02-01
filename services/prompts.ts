@@ -56,7 +56,7 @@ export const COMBINED_ANALYSIS_PROMPT = `
    - ready_for_booking: true, если клиент явно хочет записаться или согласился на диагностику.
    - needs_operator: true, если случай сложный и нужен человек.
 
-Верни ТОЛЬКО валидный JSON.
+Верни ТОЛЬКО валидный JSON. НЕ используй Markdown блоки кода. Просто чистый JSON текст.
 `;
 
 export const BUTTONS_PROMPT = `
