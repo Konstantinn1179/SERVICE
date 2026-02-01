@@ -23,7 +23,30 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Initialize Telegram Bot for notifications
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const adminChatId = process.env.ADMIN_CHAT_ID;
-const bot = telegramToken ? new TelegramBot(telegramToken, { polling: false }) : null;
+// Enable polling to receive /start command
+const bot = telegramToken ? new TelegramBot(telegramToken, { polling: true }) : null;
+
+// Handle /start command
+if (bot) {
+    bot.onText(/\/start/, (msg) => {
+        const chatId = msg.chat.id;
+        const webAppUrl = process.env.WEB_APP_URL;
+
+        if (!webAppUrl) {
+            console.log('WEB_APP_URL is not set.');
+            bot.sendMessage(chatId, 'Добро пожаловать! Сервис работает, но ссылка на Web App не настроена (WEB_APP_URL).');
+            return;
+        }
+
+        bot.sendMessage(chatId, 'Добро пожаловать в АКПП-центр! 🔧\nНажмите кнопку ниже, чтобы начать запись.', {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '📱 Открыть приложение', web_app: { url: webAppUrl } }]
+                ]
+            }
+        });
+    });
+}
 
 // Initialize Google Calendar
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
