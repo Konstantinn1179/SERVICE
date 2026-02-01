@@ -126,3 +126,4 @@ server/gen-lang-client-*.json
 !tsconfig.json
 !metadata.json
 !server/package.json
+.vscode/mcp.json
