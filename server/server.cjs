@@ -129,9 +129,6 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.get('/', (req, res) => {
-  res.send('АКПП-центр Backend is running!');
-});
 
 // Get available slots for a specific date
 app.get('/api/slots', async (req, res) => {
