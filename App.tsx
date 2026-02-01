@@ -277,7 +277,8 @@ function App() {
       });
 
       if (!response.ok) {
-          throw new Error('Server error');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Server Error: ${response.status}`);
       }
 
       // 2. Add system message
@@ -288,8 +289,8 @@ function App() {
       }]);
       
       setShowBookingForm(false);
-    } catch (e) {
-      alert('Ошибка при отправке заявки. Попробуйте позже.');
+    } catch (e: any) {
+      alert(`Ошибка при отправке заявки: ${e.message}`);
       console.error("Booking error", e);
     } finally {
       setIsLoading(false);

@@ -126,7 +126,12 @@ const checkAvailability = async (date, time) => {
         const startDateTime = new Date(`${date}T${time}:00+03:00`);
         const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Check 1 hour slot
 
-        const response = await calendar.events.list({
+        // Create a promise that rejects after 3 seconds
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Google Calendar Timeout')), 3000)
+        );
+
+        const apiPromise = calendar.events.list({
             calendarId: CALENDAR_ID,
             timeMin: startDateTime.toISOString(),
             timeMax: endDateTime.toISOString(),
@@ -134,11 +139,14 @@ const checkAvailability = async (date, time) => {
             timeZone: 'Europe/Moscow',
         });
 
+        // Race between API call and timeout
+        const response = await Promise.race([apiPromise, timeoutPromise]);
+
         // If there are any events in this interval, it's busy
         return response.data.items.length === 0;
     } catch (error) {
-        console.error('Error checking availability:', error);
-        return true; // Fail open (allow booking) if check fails, or false to be safe
+        console.error('Error checking availability (continuing anyway):', error.message);
+        return true; // Fail open (allow booking) if check fails/timeouts
     }
 };
 
