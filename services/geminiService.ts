@@ -40,6 +40,30 @@ const formatHistory = (messages: Message[]) => {
   }));
 };
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Retry wrapper with exponential backoff
+const withRetry = async <T>(fn: () => Promise<T>, retries = 3, initialDelay = 1000): Promise<T> => {
+  let currentDelay = initialDelay;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const isRateLimit = error?.message?.includes('429') || error?.status === 429;
+      const isOverloaded = error?.message?.includes('503') || error?.status === 503;
+      
+      if ((isRateLimit || isOverloaded) && i < retries - 1) {
+        console.warn(`Attempt ${i + 1} failed (Rate Limit/Overload). Retrying in ${currentDelay}ms...`);
+        await delay(currentDelay);
+        currentDelay *= 2; // Exponential backoff
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('Max retries exceeded');
+};
+
 // 1. Main Chat Logic
 export const generateChatResponse = async (history: Message[], isFirstMessage: boolean = false) => {
   let systemInstruction = MAIN_SYSTEM_PROMPT;
@@ -53,7 +77,7 @@ export const generateChatResponse = async (history: Message[], isFirstMessage: b
 
   const previousHistory = isFirstMessage ? [] : formatHistory(history.slice(0, -1));
 
-  try {
+  const runGeneration = async () => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -63,6 +87,10 @@ export const generateChatResponse = async (history: Message[], isFirstMessage: b
       contents: [...previousHistory, { role: 'user', parts: [{ text: prompt }] }]
     });
     return response.text || "Извините, получен пустой ответ от сервера.";
+  };
+
+  try {
+    return await withRetry(runGeneration);
   } catch (error) {
     console.error("Generate Chat Error:", error);
     throw error;
@@ -77,7 +105,7 @@ export interface AnalysisResult {
 }
 
 export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResult> => {
-  try {
+  const runAnalysis = async () => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -133,8 +161,13 @@ export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResul
       vehicle_data: parsed.vehicle_data || {},
       booking_status: parsed.booking_status || { ready_for_booking: false, needs_operator: false, reason: "" }
     };
+  };
+
+  try {
+    return await withRetry(runAnalysis, 2, 2000); // Fewer retries for analysis, longer initial delay
   } catch (e) {
-    console.error("Analysis Error", e);
+    console.error("Analysis Error (Max retries exceeded or other error)", e);
+    // Fail silently for analysis to not break the chat flow
     return {
       classification: { branch: "consult", status: "blue", reason: "Error" },
       vehicle_data: {},

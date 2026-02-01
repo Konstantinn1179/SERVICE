@@ -29,7 +29,7 @@ const VehicleCardDisplay: React.FC<Props> = ({ data, className }) => {
           </div>
           <div>
             <label className="text-xs text-gray-500">Год</label>
-            <div className="font-semibold text-white">{data?.year || '—'}</div>
+            <div className="font-semibold text-white truncate">{data?.year?.substring(0, 4) || '—'}</div>
           </div>
           <div>
             <label className="text-xs text-gray-500">КПП</label>
@@ -39,7 +39,7 @@ const VehicleCardDisplay: React.FC<Props> = ({ data, className }) => {
 
         {/* Symptoms */}
         <div>
-          <label className="text-xs text-gray-500 mb-1 block">Симптомы</label>
+          <label className="text-xs text-gray-500 mb-1 block">Неисправность</label>
           {symptoms.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {symptoms.map((sym, idx) => (

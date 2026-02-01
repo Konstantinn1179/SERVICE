@@ -65,13 +65,39 @@ const initCalendar = async () => {
 
 initCalendar();
 
+// Helper to check availability
+const checkAvailability = async (date, time) => {
+    if (!calendar) return true; // If calendar not set up, assume available (or handle error)
+
+    try {
+        // Force Moscow Timezone (+03:00)
+        const startDateTime = new Date(`${date}T${time}:00+03:00`);
+        const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Check 1 hour slot
+
+        const response = await calendar.events.list({
+            calendarId: CALENDAR_ID,
+            timeMin: startDateTime.toISOString(),
+            timeMax: endDateTime.toISOString(),
+            singleEvents: true,
+            timeZone: 'Europe/Moscow',
+        });
+
+        // If there are any events in this interval, it's busy
+        return response.data.items.length === 0;
+    } catch (error) {
+        console.error('Error checking availability:', error);
+        return true; // Fail open (allow booking) if check fails, or false to be safe
+    }
+};
+
 // Helper to add event
 const addCalendarEvent = async (booking) => {
     if (!calendar) return;
     if (!booking.booking_date || !booking.booking_time) return;
 
     try {
-        const startDateTime = new Date(`${booking.booking_date}T${booking.booking_time}`);
+        // Force Moscow Timezone (+03:00)
+        const startDateTime = new Date(`${booking.booking_date}T${booking.booking_time}:00+03:00`);
         const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
 
         const event = {
@@ -79,7 +105,7 @@ const addCalendarEvent = async (booking) => {
             description: `Имя: ${booking.name}\nТелефон: ${booking.phone}\nПричина: ${booking.reason}`,
             start: {
                 dateTime: startDateTime.toISOString(),
-                timeZone: 'Europe/Moscow', // Adjust as needed
+                timeZone: 'Europe/Moscow',
             },
             end: {
                 dateTime: endDateTime.toISOString(),
@@ -107,6 +133,65 @@ app.get('/', (req, res) => {
   res.send('АКПП-центр Backend is running!');
 });
 
+// Get available slots for a specific date
+app.get('/api/slots', async (req, res) => {
+    const { date } = req.query; // Format: YYYY-MM-DD
+    if (!date) {
+        return res.status(400).json({ error: 'Date is required' });
+    }
+
+    if (!calendar) {
+        return res.status(503).json({ error: 'Calendar service unavailable' });
+    }
+
+    try {
+        // Define working hours: 9:00 to 18:00
+        const workStartHour = 9;
+        const workEndHour = 18;
+        const slots = [];
+
+        // Check events for the whole day in Moscow time
+        const dayStart = new Date(`${date}T00:00:00+03:00`);
+        const dayEnd = new Date(`${date}T23:59:59+03:00`);
+
+        const response = await calendar.events.list({
+            calendarId: CALENDAR_ID,
+            timeMin: dayStart.toISOString(),
+            timeMax: dayEnd.toISOString(),
+            singleEvents: true,
+            timeZone: 'Europe/Moscow',
+        });
+
+        const busyEvents = response.data.items || [];
+
+        // Generate all possible hourly slots
+        for (let hour = workStartHour; hour < workEndHour; hour++) {
+            const timeString = `${hour.toString().padStart(2, '0')}:00`;
+            // Moscow time for the slot
+            const slotStart = new Date(`${date}T${timeString}:00+03:00`);
+            const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000);
+
+            // Check if this slot overlaps with any busy event
+            const isBusy = busyEvents.some(event => {
+                const eventStart = new Date(event.start.dateTime || event.start.date);
+                const eventEnd = new Date(event.end.dateTime || event.end.date);
+                
+                // Simple overlap check
+                return (slotStart < eventEnd && slotEnd > eventStart);
+            });
+
+            if (!isBusy) {
+                slots.push(timeString);
+            }
+        }
+
+        res.json({ date, available_slots: slots });
+    } catch (error) {
+        console.error('Error fetching slots:', error);
+        res.status(500).json({ error: 'Failed to fetch slots' });
+    }
+});
+
 // Create a new booking
 app.post('/api/bookings', async (req, res) => {
     const { name, phone, car_brand, car_model, year, reason, booking_date, booking_time } = req.body;
@@ -118,6 +203,16 @@ app.post('/api/bookings', async (req, res) => {
 
     // Combine model and year if year is provided
     const fullModel = year ? `${car_model} (${year})` : car_model;
+
+    // Check Google Calendar Availability first
+    if (booking_date && booking_time) {
+        const isAvailable = await checkAvailability(booking_date, booking_time);
+        if (!isAvailable) {
+            return res.status(409).json({ 
+                error: 'К сожалению, это время уже занято. Пожалуйста, выберите другое время.' 
+            });
+        }
+    }
 
     // WORKAROUND: Since 'booking_date' and 'booking_time' columns might not exist in Supabase yet,
     // we append them to the 'reason' field for storage, but keep them separate for Telegram notifications.
@@ -199,6 +294,11 @@ app.post('/api/auth/telegram', (req, res) => {
     
     // Mock success for now
     res.json({ success: true, user: { id: 12345, name: "Test User" } });
+});
+
+// All other GET requests not handled before will return our React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 // Start Server

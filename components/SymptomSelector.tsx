@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { COMMON_SYMPTOMS, MAINTENANCE_TYPES, CONSULT_TOPICS, PRICE_ITEMS } from '../services/carData';
 
 interface Props {
-  onSelect: (text: string) => void;
+  onSelect: (text: string, rawItem?: string, type?: MenuLevel) => void;
   onCarSelect: () => void;
   onBooking: () => void;
 }
@@ -59,7 +59,7 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
     if (level === 'consult') prefix = 'Вопрос: ';
     if (level === 'prices') prefix = 'Сколько стоит ';
     
-    onSelect(`${prefix}${item}`);
+    onSelect(`${prefix}${item}`, item, level);
   };
 
   return (
@@ -90,7 +90,7 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
           >
             <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-blue-900/50 rounded-lg group-hover:bg-blue-800 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-blue-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l2-4h10l2 4v8h-2v-1H7v1H5v-8zm2 0h10m-9 5a1 1 0 100 2 1 1 0 000-2zm8 0a1 1 0 100 2 1 1 0 000-2z" />
                 </svg>
             </div>
             <span className="text-[9px] sm:text-[10px] leading-tight text-blue-200 group-hover:text-white font-bold uppercase tracking-wide">

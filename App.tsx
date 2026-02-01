@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   generateChatResponse, 
   analyzeDialogue,
-  generateButtons, 
+  // generateButtons, 
   generateSummary
 } from './services/geminiService';
 import { 
@@ -141,15 +141,28 @@ function App() {
         setStatus(result.classification.status);
         
         // Update Vehicle Card (Merge with existing)
-        setVehicleCard(prev => ({
+        setVehicleCard(prev => {
+           // Better symptom merging strategy:
+           // If AI returns non-empty symptoms, use them (it sees full context).
+           // If AI returns empty/null, keep previous symptoms to avoid clearing them accidentally.
+           const newSymptoms = result.vehicle_data.symptoms;
+           const finalSymptoms = (newSymptoms && newSymptoms.length > 0) 
+              ? newSymptoms 
+              : (prev.symptoms || []);
+
+           return {
             ...prev,
             ...result.vehicle_data,
-            // Ensure array safety if model returns null for symptoms
-            symptoms: result.vehicle_data.symptoms || prev.symptoms || []
-        }));
+            symptoms: finalSymptoms
+           };
+        });
 
         // Update Booking Status
-        if (result.booking_status.ready_for_booking || result.booking_status.needs_operator) {
+        if (result.booking_status.ready_for_booking) {
+            setBookingReady(true);
+            // Auto-open booking form if ready
+            setShowBookingForm(true);
+        } else if (result.booking_status.needs_operator) {
             setBookingReady(true);
         }
       }).catch(err => console.error("Analysis task failed", err));
@@ -162,10 +175,11 @@ function App() {
       const finalHistory = [...updatedHistory, botMsg];
       setMessages(finalHistory);
 
-      // 4. Generate Buttons
-      generateButtons(finalHistory).then(setQuickButtons).catch(err => console.error("Buttons task failed", err));
+      // 4. Generate Buttons (DISABLED as per request to speed up)
+      // generateButtons(finalHistory).then(setQuickButtons).catch(err => console.error("Buttons task failed", err));
 
-      await analysisPromise;
+      // Do NOT await analysisPromise here to avoid blocking UI
+      // await analysisPromise;
 
     } catch (error) {
       console.error("Chat error", error);
@@ -221,8 +235,24 @@ function App() {
     handleSendMessage(`Мой автомобиль: ${brand} ${model} ${year} года.`);
   };
 
-  const handleMenuSelection = (fullText: string) => {
+  const handleMenuSelection = (fullText: string, rawItem?: string, type?: string) => {
+    // 1. Send message to chat (triggers AI analysis as well)
     handleSendMessage(fullText);
+
+    // 2. Direct update for explicit UI selections (Repair/Maintenance)
+    if (rawItem && (type === 'repair' || type === 'maintenance')) {
+      setVehicleCard(prev => {
+        const currentSymptoms = prev.symptoms || [];
+        // Avoid duplicates
+        if (!currentSymptoms.includes(rawItem)) {
+          return {
+            ...prev,
+            symptoms: [...currentSymptoms, rawItem]
+          };
+        }
+        return prev;
+      });
+    }
   };
 
   const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string) => {
@@ -426,13 +456,17 @@ function App() {
           />
         )}
 
-        {/* Modal for Booking (152-FZ Compliant) */}
+        {/* Booking Form Modal */}
         {showBookingForm && (
-          <BookingForm 
-            initialName={telegram?.initDataUnsafe?.user?.first_name || ''}
-            onSubmit={handleBookingSubmit}
-            onCancel={() => setShowBookingForm(false)}
-          />
+            <BookingForm 
+              initialName={telegram?.initDataUnsafe?.user?.first_name || ''}
+              initialBrand={vehicleCard.brand || ''}
+              initialModel={vehicleCard.model || ''}
+              initialYear={vehicleCard.year?.substring(0, 4) || ''}
+              initialReason={vehicleCard.symptoms?.join(', ') || ''}
+              onSubmit={handleBookingSubmit}
+              onCancel={() => setShowBookingForm(false)}
+            />
         )}
 
       </div>

@@ -1,22 +1,74 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface Props {
   onSubmit: (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string) => void;
   onCancel: () => void;
   initialName?: string;
+  initialBrand?: string;
+  initialModel?: string;
+  initialYear?: string;
+  initialReason?: string;
 }
 
-const BookingForm: React.FC<Props> = ({ onSubmit, onCancel, initialName = '' }) => {
+const BookingForm: React.FC<Props> = ({ 
+  onSubmit, 
+  onCancel, 
+  initialName = '',
+  initialBrand = '',
+  initialModel = '',
+  initialYear = '',
+  initialReason = ''
+}) => {
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState('+7 ');
-  const [brand, setBrand] = useState('');
-  const [model, setModel] = useState('');
-  const [year, setYear] = useState('');
+  const [brand, setBrand] = useState(initialBrand);
+  const [model, setModel] = useState(initialModel);
+  const [year, setYear] = useState(initialYear);
   const [bookingDate, setBookingDate] = useState('');
   const [bookingTime, setBookingTime] = useState('');
-  const [reason, setReason] = useState('');
+  const [reason, setReason] = useState(initialReason);
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
+
+  // Update fields if initial props change (e.g. after async analysis completes)
+  useEffect(() => {
+    if (initialName && !name) setName(initialName);
+    if (initialBrand && !brand) setBrand(initialBrand);
+    if (initialModel && !model) setModel(initialModel);
+    if (initialYear && !year) setYear(initialYear);
+    if (initialReason && !reason) setReason(initialReason);
+  }, [initialName, initialBrand, initialModel, initialYear, initialReason]);
+  
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  React.useEffect(() => {
+    if (bookingDate) {
+      fetchSlots(bookingDate);
+    } else {
+        setAvailableSlots([]);
+    }
+  }, [bookingDate]);
+
+  const fetchSlots = async (date: string) => {
+    setLoadingSlots(true);
+    setBookingTime(''); // Reset time when date changes
+    try {
+      const response = await fetch(`/api/slots?date=${date}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableSlots(data.available_slots || []);
+      } else {
+        console.error('Failed to fetch slots');
+        setAvailableSlots([]);
+      }
+    } catch (error) {
+      console.error('Error fetching slots:', error);
+      setAvailableSlots([]);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
 
   // Simple phone formatter for Russian numbers
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -153,12 +205,30 @@ const BookingForm: React.FC<Props> = ({ onSubmit, onCancel, initialName = '' }) 
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1 ml-1">Время</label>
-                  <input
-                    type="time"
-                    value={bookingTime}
-                    onChange={(e) => setBookingTime(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-600 text-sm"
-                  />
+                  {!bookingDate ? (
+                     <div className="text-gray-500 text-sm py-2 px-1">Выберите дату</div>
+                  ) : loadingSlots ? (
+                     <div className="text-gray-400 text-sm py-2 animate-pulse">Загрузка...</div>
+                  ) : availableSlots.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {availableSlots.map((slot) => (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => setBookingTime(slot)}
+                          className={`px-1 py-1.5 text-xs rounded border transition-colors ${
+                            bookingTime === slot
+                              ? 'bg-blue-600 border-blue-500 text-white'
+                              : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+                          }`}
+                        >
+                          {slot}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-red-400 text-sm py-2">Нет мест</div>
+                  )}
                 </div>
             </div>
 
@@ -173,38 +243,25 @@ const BookingForm: React.FC<Props> = ({ onSubmit, onCancel, initialName = '' }) 
               />
             </div>
 
-            {/* 152-FZ Compliance Section */}
-            <div className="pt-2">
-              <label className="flex items-start space-x-3 cursor-pointer group">
-                <div className="relative flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={agreed}
-                    onChange={(e) => setAgreed(e.target.checked)}
-                    className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-600 bg-gray-800 checked:border-blue-500 checked:bg-blue-600 transition-all"
-                  />
-                  <svg
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </div>
-                <div className="text-[11px] leading-tight text-gray-400 group-hover:text-gray-300 transition-colors">
-                  Я даю согласие на обработку моих персональных данных в соответствии с <a href="#" className="text-blue-400 underline decoration-blue-400/30 hover:decoration-blue-400">Политикой конфиденциальности</a> и ФЗ-152.
-                </div>
+            {/* Consent Checkbox */}
+            <div className="flex items-start gap-3 mt-4 mb-2">
+              <div className="flex items-center h-5">
+                <input
+                  id="consent"
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
+                />
+              </div>
+              <label htmlFor="consent" className="text-xs text-gray-400">
+                Я даю согласие на обработку моих персональных данных в соответствии с <a href="#" className="text-blue-400 hover:underline">политикой конфиденциальности</a>.
               </label>
             </div>
 
             {error && (
-              <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-2 text-center">
-                <p className="text-xs text-red-200">{error}</p>
+              <div className="text-red-400 text-sm bg-red-900/20 p-2 rounded border border-red-800/30 mb-4 text-center">
+                {error}
               </div>
             )}
 
