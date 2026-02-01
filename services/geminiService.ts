@@ -78,15 +78,25 @@ export const generateChatResponse = async (history: Message[], isFirstMessage: b
   const previousHistory = isFirstMessage ? [] : formatHistory(history.slice(0, -1));
 
   const runGeneration = async () => {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: systemInstruction,
-      },
-      contents: [...previousHistory, { role: 'user', parts: [{ text: prompt }] }]
+    // Call our own backend proxy instead of Google directly
+    const response = await fetch('/api/gemini-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: MODEL_NAME,
+            config: {
+                systemInstruction: systemInstruction,
+            },
+            contents: [...previousHistory, { role: 'user', parts: [{ text: prompt }] }]
+        })
     });
-    return response.text || "Извините, получен пустой ответ от сервера.";
+
+    if (!response.ok) {
+        throw new Error(`Proxy error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.text || "Извините, получен пустой ответ от сервера.";
   };
 
   try {

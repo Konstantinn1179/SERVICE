@@ -7,10 +7,22 @@ const { google } = require('googleapis');
 const fs = require('fs');
 
 const TelegramBot = require('node-telegram-bot-api');
+const { GoogleGenAI } = require('@google/genai');
 
 const app = express();
+app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const path = require('path');
+
+// Initialize Gemini Client
+const geminiApiKey = process.env.VITE_API_KEY || process.env.GOOGLE_AI_KEY;
+let geminiClient = null;
+if (geminiApiKey) {
+    geminiClient = new GoogleGenAI({ apiKey: geminiApiKey });
+} else {
+    console.warn("VITE_API_KEY or GOOGLE_AI_KEY not set. AI features will fail.");
+}
+
 
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../dist')));
