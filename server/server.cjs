@@ -372,16 +372,19 @@ app.post('/api/ai-proxy', async (req, res) => {
              }
 
              const completion = await openAiClient.chat.completions.create({
-                 model: "qwen/qwen-2.5-7b-instruct", // Switch to Qwen 2.5 7B (Faster/Cheaper)
+                 model: "qwen/qwen-2.5-72b-instruct", // Upgrade to 72B for better instruction following
                  messages: messages,
                  // Optional parameters
-                 temperature: 0.7,
+                 temperature: 0.2, // Lower temperature for more deterministic JSON
              });
 
              let text = completion.choices[0].message.content;
-             // Remove markdown code blocks if present
-             if (text.trim().startsWith('```')) {
-                 text = text.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
+             
+             // Robust cleanup for OpenRouter/Qwen responses
+             // 1. If wrapped in markdown code blocks (even with text before/after), extract them
+             const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
+             if (jsonMatch) {
+                 text = jsonMatch[1];
              }
 
              return res.json({

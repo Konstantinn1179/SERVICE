@@ -126,43 +126,8 @@ export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResul
             config: {
                 systemInstruction: COMBINED_ANALYSIS_PROMPT,
                 responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        classification: {
-                            type: Type.OBJECT,
-                            properties: {
-                                branch: { type: Type.STRING, enum: ["triage", "consult", "defense"] },
-                                status: { type: Type.STRING, enum: ["red", "yellow", "green", "blue", "black"] },
-                                reason: { type: Type.STRING }
-                            },
-                            required: ["branch", "status"]
-                        },
-                        vehicle_data: {
-                            type: Type.OBJECT,
-                            properties: {
-                                brand: { type: Type.STRING, nullable: true },
-                                model: { type: Type.STRING, nullable: true },
-                                year: { type: Type.STRING, nullable: true },
-                                gearbox: { type: Type.STRING, nullable: true },
-                                symptoms: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                drivable: { type: Type.BOOLEAN, nullable: true },
-                                status: { type: Type.STRING, nullable: true },
-                                queue_season: { type: Type.STRING, nullable: true },
-                                needs_diagnosis: { type: Type.BOOLEAN },
-                                wants_booking: { type: Type.BOOLEAN }
-                            }
-                        },
-                        booking_status: {
-                            type: Type.OBJECT,
-                            properties: {
-                                ready_for_booking: { type: Type.BOOLEAN },
-                                needs_operator: { type: Type.BOOLEAN },
-                                reason: { type: Type.STRING }
-                            }
-                        }
-                    }
-                }
+                // Note: Schema is ignored by OpenRouter proxy currently, 
+                // but kept here if we switch back to Gemini or enhance proxy
             },
             contents: formatHistory(history)
         })
@@ -173,7 +138,27 @@ export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResul
     }
 
     const data = await response.json();
-    const parsed = JSON.parse(data.text || "{}");
+    let text = data.text || "{}";
+    
+    // Robust JSON extraction for Qwen/OpenRouter
+    // 1. Remove markdown code blocks
+    text = text.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
+    
+    // 2. Find the first '{' and the last '}'
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    
+    if (firstBrace !== -1 && lastBrace !== -1) {
+        text = text.substring(firstBrace, lastBrace + 1);
+    }
+
+    let parsed;
+    try {
+        parsed = JSON.parse(text);
+    } catch (e) {
+        console.error("JSON Parse Error in analyzeDialogue:", e, text);
+        parsed = {};
+    }
     
     // Default fallback values
     return {
