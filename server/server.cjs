@@ -321,7 +321,33 @@ app.post('/api/auth/telegram', (req, res) => {
     res.json({ success: true, user: { id: 12345, name: "Test User" } });
 });
 
+// Proxy for Gemini API
+app.post('/api/gemini-proxy', async (req, res) => {
+    if (!geminiClient) {
+        return res.status(500).json({ error: "Server AI key not configured" });
+    }
+
+    try {
+        const { model, config, contents } = req.body;
+        
+        const response = await geminiClient.models.generateContent({
+            model: model || "gemini-3-flash-preview",
+            config,
+            contents
+        });
+
+        res.json({ 
+            text: response.text(),
+            // Pass through other properties if needed, but text is usually enough
+        });
+    } catch (error) {
+        console.error("Gemini Proxy Error:", error);
+        res.status(500).json({ error: error.message || "AI Request Failed" });
+    }
+});
+
 // All other GET requests not handled before will return our React app
+
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });

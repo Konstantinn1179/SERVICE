@@ -106,54 +106,63 @@ export interface AnalysisResult {
 
 export const analyzeDialogue = async (history: Message[]): Promise<AnalysisResult> => {
   const runAnalysis = async () => {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: COMBINED_ANALYSIS_PROMPT,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            classification: {
-              type: Type.OBJECT,
-              properties: {
-                branch: { type: Type.STRING, enum: ["triage", "consult", "defense"] },
-                status: { type: Type.STRING, enum: ["red", "yellow", "green", "blue", "black"] },
-                reason: { type: Type.STRING }
-              },
-              required: ["branch", "status"]
+    // Call our own backend proxy instead of Google directly
+    const response = await fetch('/api/gemini-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: MODEL_NAME,
+            config: {
+                systemInstruction: COMBINED_ANALYSIS_PROMPT,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        classification: {
+                            type: Type.OBJECT,
+                            properties: {
+                                branch: { type: Type.STRING, enum: ["triage", "consult", "defense"] },
+                                status: { type: Type.STRING, enum: ["red", "yellow", "green", "blue", "black"] },
+                                reason: { type: Type.STRING }
+                            },
+                            required: ["branch", "status"]
+                        },
+                        vehicle_data: {
+                            type: Type.OBJECT,
+                            properties: {
+                                brand: { type: Type.STRING, nullable: true },
+                                model: { type: Type.STRING, nullable: true },
+                                year: { type: Type.STRING, nullable: true },
+                                gearbox: { type: Type.STRING, nullable: true },
+                                symptoms: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                drivable: { type: Type.BOOLEAN, nullable: true },
+                                status: { type: Type.STRING, nullable: true },
+                                queue_season: { type: Type.STRING, nullable: true },
+                                needs_diagnosis: { type: Type.BOOLEAN },
+                                wants_booking: { type: Type.BOOLEAN }
+                            }
+                        },
+                        booking_status: {
+                            type: Type.OBJECT,
+                            properties: {
+                                ready_for_booking: { type: Type.BOOLEAN },
+                                needs_operator: { type: Type.BOOLEAN },
+                                reason: { type: Type.STRING }
+                            }
+                        }
+                    }
+                }
             },
-            vehicle_data: {
-              type: Type.OBJECT,
-              properties: {
-                brand: { type: Type.STRING, nullable: true },
-                model: { type: Type.STRING, nullable: true },
-                year: { type: Type.STRING, nullable: true },
-                gearbox: { type: Type.STRING, nullable: true },
-                symptoms: { type: Type.ARRAY, items: { type: Type.STRING } },
-                drivable: { type: Type.BOOLEAN, nullable: true },
-                status: { type: Type.STRING, nullable: true },
-                queue_season: { type: Type.STRING, nullable: true },
-                needs_diagnosis: { type: Type.BOOLEAN },
-                wants_booking: { type: Type.BOOLEAN }
-              }
-            },
-            booking_status: {
-              type: Type.OBJECT,
-              properties: {
-                ready_for_booking: { type: Type.BOOLEAN },
-                needs_operator: { type: Type.BOOLEAN },
-                reason: { type: Type.STRING }
-              }
-            }
-          }
-        }
-      },
-      contents: formatHistory(history)
+            contents: formatHistory(history)
+        })
     });
 
-    const parsed = JSON.parse(response.text || "{}");
+    if (!response.ok) {
+         throw new Error(`Proxy error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const parsed = JSON.parse(data.text || "{}");
     
     // Default fallback values
     return {
