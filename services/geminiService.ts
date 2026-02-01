@@ -79,7 +79,8 @@ export const generateChatResponse = async (history: Message[], isFirstMessage: b
 
   const runGeneration = async () => {
     // Call our own backend proxy instead of Google directly
-    const response = await fetch('/api/gemini-proxy', {
+    // Supports both Gemini and OpenRouter (Qwen)
+    const response = await fetch('/api/ai-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

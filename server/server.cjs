@@ -8,19 +8,31 @@ const fs = require('fs');
 
 const TelegramBot = require('node-telegram-bot-api');
 const { GoogleGenAI } = require('@google/genai');
+const OpenAI = require('openai');
 
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const path = require('path');
 
-// Initialize Gemini Client
+// Initialize Gemini Client (Legacy/Backup)
 const geminiApiKey = process.env.VITE_API_KEY || process.env.GOOGLE_AI_KEY;
 let geminiClient = null;
 if (geminiApiKey) {
     geminiClient = new GoogleGenAI({ apiKey: geminiApiKey });
+}
+
+// Initialize OpenRouter/OpenAI Client (Primary)
+const openRouterKey = process.env.OPENROUTER_API_KEY;
+let openAiClient = null;
+if (openRouterKey) {
+    openAiClient = new OpenAI({
+        apiKey: openRouterKey,
+        baseURL: 'https://openrouter.ai/api/v1',
+    });
+    console.log("OpenAI/OpenRouter client initialized.");
 } else {
-    console.warn("VITE_API_KEY or GOOGLE_AI_KEY not set. AI features will fail.");
+    console.warn("OPENROUTER_API_KEY not set. Qwen/OpenRouter features will fail.");
 }
 
 
@@ -333,27 +345,58 @@ app.post('/api/auth/telegram', (req, res) => {
     res.json({ success: true, user: { id: 12345, name: "Test User" } });
 });
 
-// Proxy for Gemini API
-app.post('/api/gemini-proxy', async (req, res) => {
-    if (!geminiClient) {
-        return res.status(500).json({ error: "Server AI key not configured" });
-    }
-
+// Proxy for AI API (Supports Gemini and OpenRouter/Qwen)
+app.post('/api/ai-proxy', async (req, res) => {
     try {
         const { model, config, contents } = req.body;
         
-        const response = await geminiClient.models.generateContent({
-            model: model || "gemini-3-flash-preview",
-            config,
-            contents
-        });
+        // Priority 1: OpenRouter (Qwen)
+        if (openAiClient) {
+             // Convert Google Gemini format to OpenAI format
+             let messages = [];
+             
+             // 1. System Prompt
+             if (config && config.systemInstruction) {
+                 messages.push({ role: "system", content: config.systemInstruction });
+             }
 
-        res.json({ 
-            text: response.text(),
-            // Pass through other properties if needed, but text is usually enough
-        });
+             // 2. Chat History
+             if (contents && Array.isArray(contents)) {
+                 contents.forEach(item => {
+                     const role = item.role === 'model' ? 'assistant' : 'user';
+                     const text = item.parts && item.parts[0] ? item.parts[0].text : '';
+                     if (text) {
+                         messages.push({ role, content: text });
+                     }
+                 });
+             }
+
+             const completion = await openAiClient.chat.completions.create({
+                 model: "qwen/qwen-2.5-72b-instruct", // Force Qwen 2.5
+                 messages: messages,
+                 // Optional parameters
+                 temperature: 0.7,
+             });
+
+             return res.json({
+                 text: completion.choices[0].message.content
+             });
+        }
+
+        // Priority 2: Gemini (Legacy/Backup)
+        if (geminiClient) {
+            const response = await geminiClient.models.generateContent({
+                model: model || "gemini-3-flash-preview",
+                config,
+                contents
+            });
+            return res.json({ text: response.text() });
+        }
+
+        throw new Error("No AI client configured (Check OPENROUTER_API_KEY or VITE_API_KEY)");
+
     } catch (error) {
-        console.error("Gemini Proxy Error:", error);
+        console.error("AI Proxy Error:", error);
         res.status(500).json({ error: error.message || "AI Request Failed" });
     }
 });
