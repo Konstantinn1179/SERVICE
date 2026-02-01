@@ -372,7 +372,7 @@ app.post('/api/ai-proxy', async (req, res) => {
              }
 
              const completion = await openAiClient.chat.completions.create({
-                 model: "qwen/qwen-2.5-72b-instruct", // Force Qwen 2.5
+                 model: "qwen/qwen-2.5-7b-instruct", // Switch to Qwen 2.5 7B (Faster/Cheaper)
                  messages: messages,
                  // Optional parameters
                  temperature: 0.7,
