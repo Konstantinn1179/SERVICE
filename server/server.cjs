@@ -37,7 +37,12 @@ const initCalendar = async () => {
         let auth;
         // Check if key is provided as JSON string in env var (for cloud deployment)
         if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-             const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+             let jsonStr = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+             // Remove markdown code blocks if user accidentally copied them
+             if (jsonStr.trim().startsWith('```')) {
+                 jsonStr = jsonStr.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
+             }
+             const credentials = JSON.parse(jsonStr);
              auth = new google.auth.GoogleAuth({
                 credentials,
                 scopes: SCOPES,
