@@ -461,30 +461,33 @@ app.post('/api/bookings', async (req, res) => {
 
     // 2. Try Supabase (Fallback)
     if (!dbSuccess && supabase) {
-        const { data: sbData, error } = await supabase
-            .from('car_bookings')
-            .insert([
-                { 
-                    name, 
-                    phone, 
-                    car_brand: car_brand, 
-                    car_model: fullModel, 
-                    reason: storedReason, 
-                    status: 'pending',
-                    booking_date: booking_date || null,
-                    booking_time: booking_time || null,
-                    chat_id: chat_id || null
-                }
-            ])
-            .select();
+        try {
+            const { data: sbData, error } = await supabase
+                .from('car_bookings')
+                .insert([
+                    { 
+                        name, 
+                        phone, 
+                        car_brand: car_brand, 
+                        car_model: fullModel, 
+                        reason: storedReason, 
+                        status: 'pending',
+                        booking_date: booking_date || null,
+                        booking_time: booking_time || null,
+                        chat_id: chat_id || null
+                    }
+                ])
+                .select();
 
-        if (error) {
-            console.error('Supabase error:', error);
-            // Don't fail the request if DB fails. We still want to send Telegram notification.
-            // if (!dbSuccess) return res.status(500).json({ error: error.message });
-        } else {
-            data = sbData;
-            dbSuccess = true;
+            if (error) {
+                console.error('Supabase error:', error);
+                // Don't fail the request if DB fails. We still want to send Telegram notification.
+            } else {
+                data = sbData;
+                dbSuccess = true;
+            }
+        } catch (sbError) {
+            console.error('Supabase Exception:', sbError);
         }
     } 
     
