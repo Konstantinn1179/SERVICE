@@ -18,6 +18,7 @@ import StatusHeader from './components/StatusHeader';
 import CarSelector from './components/CarSelector';
 import SymptomSelector from './components/SymptomSelector';
 import BookingForm from './components/BookingForm';
+import AdminCalendar from './components/AdminCalendar';
 
 // --- CONFIGURATION ---
 // Используем прокси Vite для локальной разработки и относительный путь для продакшена
@@ -32,6 +33,13 @@ const STATIC_ANSWERS: Record<string, string> = {
 };
 
 function App() {
+  // Simple routing for demo purposes
+  const path = window.location.pathname;
+
+  if (path === '/admin/calendar' || path.startsWith('/admin/calendar')) {
+    return <AdminCalendar />;
+  }
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -255,7 +263,7 @@ function App() {
     }
   };
 
-  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string) => {
+  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number) => {
     setIsLoading(true);
     try {
       // 1. Send to Backend
@@ -272,7 +280,8 @@ function App() {
             year, 
             reason,
             booking_date: bookingDate,
-            booking_time: bookingTime
+            booking_time: bookingTime,
+            chat_id: chatId
         })
       });
 

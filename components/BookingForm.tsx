@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 interface Props {
-  onSubmit: (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string) => void;
+  onSubmit: (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number) => void;
   onCancel: () => void;
   initialName?: string;
   initialBrand?: string;
@@ -112,7 +112,8 @@ const BookingForm: React.FC<Props> = ({
     }
 
     setError('');
-    onSubmit(name, phone, brand, model, year, reason, bookingDate, bookingTime);
+    const chatId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+    onSubmit(name, phone, brand, model, year, reason, bookingDate, bookingTime, chatId);
   };
 
   return (
