@@ -5,7 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const db = require('./db'); // Import PostgreSQL connection
-const { google } = require('googleapis');
+// const { google } = require('googleapis');
 const fs = require('fs');
 
 const TelegramBot = require('node-telegram-bot-api');
@@ -235,116 +235,28 @@ if (bot) {
     });
 }
 
-// Initialize Google Calendar
-const SCOPES = ['https://www.googleapis.com/auth/calendar'];
-const KEY_PATH = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || './service-account.json';
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary';
+// Initialize Google Calendar (DISABLED)
+const calendar = null; // Disable calendar
 
-let calendar = null;
-
-const initCalendar = async () => {
-    try {
-        let auth;
-        // Check if key is provided as JSON string in env var (for cloud deployment)
-        if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-             let jsonStr = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-             // Remove markdown code blocks if user accidentally copied them
-             if (jsonStr.trim().startsWith('```')) {
-                 jsonStr = jsonStr.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
-             }
-             const credentials = JSON.parse(jsonStr);
-             auth = new google.auth.GoogleAuth({
-                credentials,
-                scopes: SCOPES,
-            });
-            console.log('Google Calendar API инициализирован через JSON env var.');
-        } 
-        // Fallback to file path
-        else if (fs.existsSync(KEY_PATH)) {
-            auth = new google.auth.GoogleAuth({
-                keyFile: KEY_PATH,
-                scopes: SCOPES,
-            });
-            console.log('Google Calendar API инициализирован через key file.');
-        } else {
-            console.log('Google Service Account Key не найден (проверены env GOOGLE_SERVICE_ACCOUNT_JSON и файл ' + KEY_PATH + ')');
-            console.log('Интеграция с календарем будет пропущена.');
-            return;
-        }
-
-        calendar = google.calendar({ version: 'v3', auth });
-    } catch (error) {
-        console.error('Ошибка инициализации Google Calendar:', error.message);
-    }
-};
-
-initCalendar();
-
-// Helper to check availability
+// Helper to check availability (Using DB)
 const checkAvailability = async (date, time) => {
-    if (!calendar) return true; // If calendar not set up, assume available (or handle error)
-
     try {
-        // Force Moscow Timezone (+03:00)
-        const startDateTime = new Date(`${date}T${time}:00+03:00`);
-        const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Check 1 hour slot
-
-        // Create a promise that rejects after 3 seconds
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Тайм-аут Google Calendar')), 3000)
+        if (!process.env.DATABASE_URL) return true;
+        // Check if there is a booking at this time
+        const result = await db.query(
+            "SELECT id FROM car_bookings WHERE booking_date = $1 AND booking_time = $2 AND status != 'cancelled'",
+            [date, time]
         );
-
-        const apiPromise = calendar.events.list({
-            calendarId: CALENDAR_ID,
-            timeMin: startDateTime.toISOString(),
-            timeMax: endDateTime.toISOString(),
-            singleEvents: true,
-            timeZone: 'Europe/Moscow',
-        });
-
-        // Race between API call and timeout
-        const response = await Promise.race([apiPromise, timeoutPromise]);
-
-        // If there are any events in this interval, it's busy
-        return response.data.items.length === 0;
-    } catch (error) {
-        console.error('Error checking availability (continuing anyway):', error.message);
-        return true; // Fail open (allow booking) if check fails/timeouts
+        return result.rows.length === 0;
+    } catch (e) {
+        console.error("Availability check error:", e);
+        return true; // Fail open
     }
 };
 
-// Helper to add event
+// Helper to add event (Disabled)
 const addCalendarEvent = async (booking) => {
-    if (!calendar) return;
-    if (!booking.booking_date || !booking.booking_time) return;
-
-    try {
-        // Force Moscow Timezone (+03:00)
-        const startDateTime = new Date(`${booking.booking_date}T${booking.booking_time}:00+03:00`);
-        const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
-
-        const event = {
-            summary: `Ремонт АКПП: ${booking.car_brand} ${booking.car_model}`,
-            description: `Имя: ${booking.name}\nТелефон: ${booking.phone}\nПричина: ${booking.reason}`,
-            start: {
-                dateTime: startDateTime.toISOString(),
-                timeZone: 'Europe/Moscow',
-            },
-            end: {
-                dateTime: endDateTime.toISOString(),
-                timeZone: 'Europe/Moscow',
-            },
-        };
-
-        const res = await calendar.events.insert({
-            calendarId: CALENDAR_ID,
-            resource: event,
-        });
-        console.log('Event created: %s', res.data.htmlLink);
-        return res.data;
-    } catch (error) {
-        console.error('Error adding to calendar:', error);
-    }
+   return;
 };
 
 // Middleware
@@ -360,47 +272,28 @@ app.get('/api/slots', async (req, res) => {
         return res.status(400).json({ error: 'Date is required' });
     }
 
-    if (!calendar) {
-        return res.status(503).json({ error: 'Calendar service unavailable' });
-    }
-
     try {
         // Define working hours: 9:00 to 18:00
         const workStartHour = 9;
         const workEndHour = 18;
         const slots = [];
 
-        // Check events for the whole day in Moscow time
-        const dayStart = new Date(`${date}T00:00:00+03:00`);
-        const dayEnd = new Date(`${date}T23:59:59+03:00`);
-
-        const response = await calendar.events.list({
-            calendarId: CALENDAR_ID,
-            timeMin: dayStart.toISOString(),
-            timeMax: dayEnd.toISOString(),
-            singleEvents: true,
-            timeZone: 'Europe/Moscow',
-        });
-
-        const busyEvents = response.data.items || [];
+        // Fetch busy slots from DB
+        let busyTimes = [];
+        if (process.env.DATABASE_URL) {
+             const result = await db.query(
+                "SELECT booking_time FROM car_bookings WHERE booking_date = $1 AND status != 'cancelled'",
+                [date]
+             );
+             busyTimes = result.rows.map(row => row.booking_time ? row.booking_time.toString().slice(0, 5) : '');
+        }
 
         // Generate all possible hourly slots
         for (let hour = workStartHour; hour < workEndHour; hour++) {
             const timeString = `${hour.toString().padStart(2, '0')}:00`;
-            // Moscow time for the slot
-            const slotStart = new Date(`${date}T${timeString}:00+03:00`);
-            const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000);
-
-            // Check if this slot overlaps with any busy event
-            const isBusy = busyEvents.some(event => {
-                const eventStart = new Date(event.start.dateTime || event.start.date);
-                const eventEnd = new Date(event.end.dateTime || event.end.date);
-                
-                // Simple overlap check
-                return (slotStart < eventEnd && slotEnd > eventStart);
-            });
-
-            if (!isBusy) {
+            
+            // Check if this slot is busy
+            if (!busyTimes.includes(timeString)) {
                 slots.push(timeString);
             }
         }
@@ -529,7 +422,8 @@ app.post('/api/bookings', async (req, res) => {
         console.log('Telegram bot or ADMIN_CHAT_ID not configured. Skipping notification.');
     }
 
-    // Add to Google Calendar
+    // Add to Google Calendar (DISABLED)
+    /*
     if (booking_date && booking_time) {
         await addCalendarEvent({ 
             name, 
@@ -541,6 +435,7 @@ app.post('/api/bookings', async (req, res) => {
             booking_time 
         });
     }
+    */
 
     res.status(201).json({ success: true, data });
 });
