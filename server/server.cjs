@@ -77,6 +77,11 @@ if (bot) {
         console.error(`⚠️ Ошибка Telegram Polling: ${error.code} - ${error.message}`);
     });
 
+    Promise.resolve()
+      .then(() => bot.deleteWebHook({ drop_pending_updates: false }))
+      .then(() => console.log('Webhook отключен, включен режим polling'))
+      .catch((err) => console.log('Не удалось отключить webhook:', err && err.message));
+
 } else {
     console.log('⚠️ Telegram Bot Token не установлен. Функции бота отключены.');
 }
@@ -204,10 +209,11 @@ if (bot) {
             return;
         }
 
+        const openUrl = `${webAppUrl}?platform=telegram&start=app`;
         bot.sendMessage(chatId, 'Добро пожаловать в АКПП-центр! 🔧\nНажмите кнопку ниже, чтобы начать запись.', {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: '📱 Открыть приложение', web_app: { url: webAppUrl } }]
+                    [{ text: '📱 Открыть приложение', web_app: { url: openUrl } }]
                 ]
             }
         });
@@ -223,7 +229,9 @@ if (bot) {
         }
 
         const webAppUrl = process.env.WEB_APP_URL;
-        const calendarUrl = webAppUrl ? `${webAppUrl}/admin/calendar` : 'http://localhost:5173/admin/calendar';
+        const calendarUrl = webAppUrl 
+            ? `${webAppUrl}/admin/calendar?platform=telegram` 
+            : 'http://localhost:5173/admin/calendar?platform=telegram';
 
         bot.sendMessage(chatId, '📅 Панель администратора', {
             reply_markup: {
@@ -232,8 +240,52 @@ if (bot) {
                 ]
             }
         });
+        bot.sendMessage(chatId, `URL календаря:\n${calendarUrl}`);
+
+    bot.onText(/\/admin_debug/, (msg) => {
+        const chatId = msg.chat.id;
+        if (process.env.ADMIN_CHAT_ID && chatId.toString() !== process.env.ADMIN_CHAT_ID) {
+            bot.sendMessage(chatId, '⛔ Доступ запрещен.');
+            return;
+        }
+        const webAppUrl = process.env.WEB_APP_URL;
+        const calendarUrl = webAppUrl 
+            ? `${webAppUrl}/admin/calendar?platform=telegram` 
+            : 'http://localhost:5173/admin/calendar?platform=telegram';
+        bot.sendMessage(chatId, `Проверка ссылок:\nMini App: ${calendarUrl}\nURL: ${calendarUrl}`, {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🗓 Календарь (Mini App)', web_app: { url: calendarUrl } }],
+                    [{ text: '🔗 Календарь (URL)', url: calendarUrl }]
+                ]
+            }
+        });
     });
 }
+
+app.get('/api/health', (req, res) => {
+    res.json({
+        ok: true,
+        bot_active: !!bot,
+        telegram_token_set: !!telegramToken,
+        admin_chat_set: !!adminChatId,
+        supabase_connected: !!supabase,
+        web_app_url_set: !!process.env.WEB_APP_URL,
+        uptime_sec: Math.floor(process.uptime()),
+    });
+});
+
+app.post('/api/bot/test', async (req, res) => {
+    try {
+        if (!bot || !adminChatId) {
+            return res.status(400).json({ error: 'Бот не активен или ADMIN_CHAT_ID не установлен' });
+        }
+        await bot.sendMessage(adminChatId, 'Тестовое сообщение: бот онлайн ✅');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'Send failed' });
+    }
+});
 
 // Initialize Google Calendar
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
@@ -414,7 +466,7 @@ app.get('/api/slots', async (req, res) => {
 
 // Create a new booking
 app.post('/api/bookings', async (req, res) => {
-    const { name, phone, car_brand, car_model, year, reason, booking_date, booking_time, chat_id } = req.body;
+    const { name, phone, car_brand, car_model, year, reason, booking_date, booking_time, chat_id, platform } = req.body;
 
     // Basic validation
     if (!name || !phone) {
@@ -439,6 +491,7 @@ app.post('/api/bookings', async (req, res) => {
     let storedReason = reason || '';
     if (booking_date) storedReason += `\n📅 Дата: ${booking_date}`;
     if (booking_time) storedReason += `\n⏰ Время: ${booking_time}`;
+    if (platform) storedReason += `\n🟦 Платформа: ${platform}`;
 
     let data = [];
     let dbSuccess = false;
@@ -447,9 +500,9 @@ app.post('/api/bookings', async (req, res) => {
     try {
         if (process.env.DATABASE_URL) {
              const result = await db.query(
-                `INSERT INTO car_bookings (name, phone, car_brand, car_model, reason, status, booking_date, booking_time, chat_id) 
-                 VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8) RETURNING *`,
-                [name, phone, car_brand, fullModel, storedReason, booking_date || null, booking_time || null, chat_id || null]
+                `INSERT INTO car_bookings (name, phone, car_brand, car_model, reason, status, booking_date, booking_time, chat_id, platform) 
+                 VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9) RETURNING *`,
+                [name, phone, car_brand, fullModel, storedReason, booking_date || null, booking_time || null, chat_id || null, platform || null]
              );
              data = result.rows;
              dbSuccess = true;

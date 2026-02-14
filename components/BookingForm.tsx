@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 interface Props {
-  onSubmit: (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number) => void;
+  onSubmit: (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number, platform?: string) => void;
   onCancel: () => void;
   initialName?: string;
   initialBrand?: string;
@@ -113,7 +113,9 @@ const BookingForm: React.FC<Props> = ({
 
     setError('');
     const chatId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-    onSubmit(name, phone, brand, model, year, reason, bookingDate, bookingTime, chatId);
+    const params = new URLSearchParams(window.location.search);
+    const platformParam = params.get('platform') || (window.Telegram?.WebApp ? 'telegram' : undefined);
+    onSubmit(name, phone, brand, model, year, reason, bookingDate, bookingTime, chatId, platformParam || 'web');
   };
 
   return (

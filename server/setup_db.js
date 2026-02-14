@@ -45,6 +45,11 @@ async function setupDatabase() {
                     ALTER TABLE car_bookings ADD COLUMN chat_id BIGINT; 
                     RAISE NOTICE 'Added chat_id column';
                 END IF;
+
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='car_bookings' AND column_name='platform') THEN 
+                    ALTER TABLE car_bookings ADD COLUMN platform TEXT; 
+                    RAISE NOTICE 'Added platform column';
+                END IF;
             END $$;
         `);
         console.log('✅ Schema migration (columns) completed!');

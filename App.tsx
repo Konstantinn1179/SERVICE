@@ -35,8 +35,10 @@ const STATIC_ANSWERS: Record<string, string> = {
 function App() {
   // Simple routing for demo purposes
   const path = window.location.pathname;
+  const params = new URLSearchParams(window.location.search);
+  const startParam = params.get('start');
 
-  if (path === '/admin/calendar' || path.startsWith('/admin/calendar')) {
+  if (startParam === 'calendar' || path === '/admin/calendar' || path.startsWith('/admin/calendar')) {
     return <AdminCalendar />;
   }
 
@@ -263,7 +265,7 @@ function App() {
     }
   };
 
-  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number) => {
+  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number, platform?: string) => {
     setIsLoading(true);
     try {
       // 1. Send to Backend
@@ -281,7 +283,8 @@ function App() {
             reason,
             booking_date: bookingDate,
             booking_time: bookingTime,
-            chat_id: chatId
+            chat_id: chatId,
+            platform: platform
         })
       });
 
