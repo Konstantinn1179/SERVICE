@@ -182,22 +182,61 @@ const AdminCalendar: React.FC = () => {
   };
 
   return (
-    <div className="h-screen bg-white flex flex-col">
+    <div className="h-screen bg-white text-black flex flex-col">
+      <style>{`
+        .rbc-calendar, .rbc-calendar * { color: #000 !important; }
+        .rbc-calendar, .rbc-calendar * { box-sizing: border-box; }
+        .rbc-event, .rbc-show-more { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rbc-event-content, .rbc-event-label { overflow: hidden; text-overflow: ellipsis; }
+        .rbc-row-segment { max-width: 100%; }
+        .rbc-month-view .rbc-header { flex: 0 0 14.2857% !important; min-width: 0 !important; }
+        .rbc-month-view .rbc-row-bg .rbc-day-bg { flex: 0 0 14.2857% !important; width: 14.2857% !important; }
+        .rbc-time-view .rbc-time-content .rbc-time-column { flex: 1 0 0 !important; min-width: 0 !important; }
+        .rbc-time-view .rbc-time-gutter { flex: 0 0 60px !important; }
+        .rbc-time-view .rbc-time-content { overflow: hidden; }
+        .rbc-date-cell { white-space: nowrap; }
+        .rbc-header { white-space: nowrap; }
+        .rbc-day-slot .rbc-events-container { overflow: hidden; }
+        .rbc-month-view,
+        .rbc-time-view,
+        .rbc-time-slot,
+        .rbc-time-content,
+        .rbc-day-bg,
+        .rbc-event,
+        .rbc-header,
+        .rbc-row,
+        .rbc-row-segment,
+        .rbc-date-cell,
+        .rbc-time-gutter,
+        .rbc-time-header,
+        .rbc-time-header-content {
+          border-color: #000 !important;
+        }
+        .rbc-month-view,
+        .rbc-time-view,
+        .rbc-time-content,
+        .rbc-day-bg,
+        .rbc-time-gutter,
+        .rbc-time-header,
+        .rbc-time-header-content {
+          background: #fff !important;
+        }
+      `}</style>
       {/* Header */}
-      <div className="bg-gray-900 text-white p-4 flex justify-between items-center shadow-md z-10">
+      <div className="bg-white text-black p-4 flex justify-between items-center border-b border-black z-10">
         <div className="flex items-center space-x-4">
-             <h1 className="text-xl font-bold text-blue-400">АКПП-Центр | Календарь</h1>
-             <span className="text-sm text-gray-400">Панель администратора</span>
+             <h1 className="text-xl font-bold">АКПП-Центр | Календарь</h1>
+             <span className="text-sm">Панель администратора</span>
         </div>
         <div className="flex items-center space-x-3">
              <button 
                onClick={fetchEvents}
-               className="p-2 hover:bg-gray-800 rounded-full transition-colors"
+               className="p-2 hover:bg-gray-200 rounded-full transition-colors border border-black"
                title="Обновить"
              >
                 🔄
              </button>
-             <a href="/" className="text-sm text-gray-300 hover:text-white underline">В чат</a>
+             <a href="/" className="text-sm hover:underline text-black">В чат</a>
         </div>
       </div>
 

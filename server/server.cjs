@@ -13,6 +13,25 @@ const cron = require('node-cron');
 const { GoogleGenAI } = require('@google/genai');
 const OpenAI = require('openai');
 
+// Lazy MAX Bot API client
+let maxApiPromise = null;
+const getMaxApi = async () => {
+    if (!process.env.MAX_BOT_TOKEN) return null;
+    if (!maxApiPromise) {
+        maxApiPromise = import('@maxhub/max-bot-api')
+            .then(mod => {
+                const { Bot } = mod;
+                const bot = new Bot(process.env.MAX_BOT_TOKEN);
+                return bot.api;
+            })
+            .catch(err => {
+                console.error('Ошибка инициализации MAX Bot API:', err && err.message);
+                return null;
+            });
+    }
+    return maxApiPromise;
+};
+
 const app = express();
 app.use(express.json());
 app.use(cors()); // Enable CORS early
@@ -183,10 +202,10 @@ if (bot) {
 
             // If it was a client action, notify Admin
             if (isClientAction && process.env.ADMIN_CHAT_ID) {
-                // Fetch booking details for better notification (optional, but good)
-                // For now, simple notification
                 const adminMsg = `🔔 <b>Обновление статуса</b>\nКлиент изменил статус заявки #${bookingId}.\nНовый статус: ${statusText}`;
                 bot.sendMessage(process.env.ADMIN_CHAT_ID, adminMsg, { parse_mode: 'HTML' });
+                const plainForMax = adminMsg.replace(/<[^>]+>/g, '');
+                sendMaxAdmin(plainForMax);
             }
 
         } catch (err) {
@@ -241,6 +260,7 @@ if (bot) {
             }
         });
         bot.sendMessage(chatId, `URL календаря:\n${calendarUrl}`);
+    });
 
     bot.onText(/\/admin_debug/, (msg) => {
         const chatId = msg.chat.id;
@@ -273,6 +293,19 @@ app.get('/api/health', (req, res) => {
         web_app_url_set: !!process.env.WEB_APP_URL,
         uptime_sec: Math.floor(process.uptime()),
     });
+});
+
+app.get('/api/bot/me', async (req, res) => {
+    try {
+        if (!bot) {
+            return res.status(400).json({ error: 'Бот не активен' });
+        }
+        const me = await bot.getMe();
+        const link = me.username ? `https://t.me/${me.username}` : null;
+        res.json({ ok: true, id: me.id, first_name: me.first_name, username: me.username || null, link });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'getMe error' });
+    }
 });
 
 app.post('/api/bot/test', async (req, res) => {
@@ -375,9 +408,11 @@ const addCalendarEvent = async (booking) => {
         const startDateTime = new Date(`${booking.booking_date}T${booking.booking_time}:00+03:00`);
         const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
 
+        const plateStr = booking.license_plate ? `\nГос. номер: ${booking.license_plate}` : '';
+        const mileageStr = booking.mileage ? `\nПробег: ${booking.mileage} км` : '';
         const event = {
             summary: `Ремонт АКПП: ${booking.car_brand} ${booking.car_model}`,
-            description: `Имя: ${booking.name}\nТелефон: ${booking.phone}\nПричина: ${booking.reason}`,
+            description: `Имя: ${booking.name}\nТелефон: ${booking.phone}${plateStr}${mileageStr}\nПричина: ${booking.reason}`,
             start: {
                 dateTime: startDateTime.toISOString(),
                 timeZone: 'Europe/Moscow',
@@ -404,6 +439,102 @@ const addCalendarEvent = async (booking) => {
 app.use(express.json());
 
 // Routes
+// Helper to send message back to MAX
+const sendMaxMessage = async ({ chatId, userId, text }) => {
+    try {
+        const api = await getMaxApi();
+        if (!api) {
+            console.warn('MAX API недоступен, сообщение не отправлено.');
+            return;
+        }
+        if (chatId) {
+            await api.sendMessageToChat(chatId, text, { format: 'markdown' });
+        } else if (userId) {
+            await api.sendMessageToUser(userId, text, { format: 'markdown' });
+        } else {
+            console.warn('Нет chatId или userId для отправки сообщения в MAX.');
+        }
+    } catch (err) {
+        console.error('Ошибка отправки сообщения в MAX:', err && err.message);
+    }
+};
+
+const sendMaxAdmin = async (text) => {
+    try {
+        const raw = (process.env.MAX_ADMIN_USER_ID || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
+        const id = raw.find(v => /^\d+$/.test(v));
+        if (!id) {
+            console.warn('MAX_ADMIN_USER_ID не задан или не содержит числовой ID.');
+            return;
+        }
+        await sendMaxMessage({ userId: Number(id), chatId: null, text });
+    } catch (err) {
+        console.error('Ошибка отправки сообщения администратору MAX:', err && err.message);
+    }
+};
+
+// MAX Webhook
+app.post('/api/max/webhook', async (req, res) => {
+    try {
+        const secret = process.env.MAX_WEBHOOK_SECRET;
+        const token = process.env.MAX_BOT_TOKEN;
+        const body = req.body || {};
+        const type = body?.updateType || body?.type || '';
+        const data = body?.data || body;
+        
+        const sender = data?.message?.sender || data?.user || {};
+        const userId = sender.userId || data?.chatId || data?.userId || null;
+        const username = sender.username || data?.username || null;
+        const chatId = data?.chatId || data?.chat_id || data?.message?.recipient?.chatId || null;
+
+        const isAdmin = (() => {
+            const raw = (process.env.MAX_ADMIN_USER_ID || '')
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
+
+            const idList = raw.filter(v => /^\d+$/.test(v));
+            const usernameList = raw.filter(v => !/^\d+$/.test(v));
+
+            const byId = userId && idList.includes(String(userId));
+            const byUsername = username && usernameList.includes(String(username));
+
+            return Boolean(byId || byUsername);
+        })();
+
+        console.log('MAX update:', { type, userId, username, isAdmin, chatId });
+
+        const webAppUrl = process.env.WEB_APP_URL || 'https://lasermehanizm.tb.ru';
+        const link = `${webAppUrl}?platform=max&start=chat`;
+
+        if (!isAdmin) {
+            const text = `Здравствуйте! Я виртуальный помощник АКПП-центра.\n\nДля консультации и записи на сервис откройте приложение:\n${link}`;
+            await sendMaxMessage({ chatId, userId, text });
+        } else {
+            const userText = data?.message?.text || '';
+            const text = `Админ, я получил от вас сообщение:\n"${userText}"`;
+            await sendMaxMessage({ chatId, userId, text });
+        }
+
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'Webhook error' });
+    }
+});
+
+// GigaChat Token Probe (skeleton)
+app.get('/api/gigachat/token', async (req, res) => {
+    try {
+        const { getAccessToken } = require('./gigachat');
+        const token = await getAccessToken();
+        res.json({ ok: true, access_token: token ? token : null });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'Token error' });
+    }
+});
 
 // Get available slots for a specific date
 app.get('/api/slots', async (req, res) => {
@@ -466,7 +597,7 @@ app.get('/api/slots', async (req, res) => {
 
 // Create a new booking
 app.post('/api/bookings', async (req, res) => {
-    const { name, phone, car_brand, car_model, year, reason, booking_date, booking_time, chat_id, platform } = req.body;
+    const { name, phone, car_brand, car_model, year, reason, booking_date, booking_time, chat_id, platform, license_plate, mileage } = req.body;
 
     // Basic validation
     if (!name || !phone) {
@@ -492,6 +623,8 @@ app.post('/api/bookings', async (req, res) => {
     if (booking_date) storedReason += `\n📅 Дата: ${booking_date}`;
     if (booking_time) storedReason += `\n⏰ Время: ${booking_time}`;
     if (platform) storedReason += `\n🟦 Платформа: ${platform}`;
+    if (license_plate) storedReason += `\n🚘 Гос. номер: ${license_plate}`;
+    if (mileage) storedReason += `\n📏 Пробег: ${mileage} км`;
 
     let data = [];
     let dbSuccess = false;
@@ -558,7 +691,9 @@ app.post('/api/bookings', async (req, res) => {
         // Use the ID from database if available, otherwise use placeholder (though callbacks won't work well without ID)
         const bookingId = (data && data[0] && data[0].id) ? data[0].id : 'unknown';
 
-        const message = `🔔 <b>Новая заявка!</b>\n\n👤 <b>Имя:</b> ${name}\n📱 <b>Телефон:</b> ${phone}\n🚗 <b>Авто:</b> ${car_brand} ${fullModel}${dateStr}${timeStr}\n🔧 <b>Причина:</b> ${reason || 'Не указана'}`;
+        const plateStr = license_plate ? `\n🚘 <b>Гос. номер:</b> ${license_plate}` : '';
+        const mileageStr = mileage ? `\n📏 <b>Пробег:</b> ${mileage} км` : '';
+        const message = `🔔 <b>Новая заявка!</b>\n\n👤 <b>Имя:</b> ${name}\n📱 <b>Телефон:</b> ${phone}\n🚗 <b>Авто:</b> ${car_brand} ${fullModel}${plateStr}${mileageStr}${dateStr}${timeStr}\n🔧 <b>Причина:</b> ${reason || 'Не указана'}`;
         
         const opts = {
             parse_mode: 'HTML',
@@ -575,6 +710,8 @@ app.post('/api/bookings', async (req, res) => {
         try {
             await bot.sendMessage(adminChatId, message, opts);
             console.log('Telegram notification sent to', adminChatId);
+            const plainForMax = message.replace(/<[^>]+>/g, '');
+            await sendMaxAdmin(plainForMax);
         } catch (botError) {
             console.error('Failed to send Telegram notification:', botError.message);
         }
@@ -591,7 +728,9 @@ app.post('/api/bookings', async (req, res) => {
             car_model: fullModel, 
             reason, 
             booking_date, 
-            booking_time 
+            booking_time,
+            license_plate,
+            mileage
         });
     }
 
@@ -603,10 +742,11 @@ app.get('/api/admin/bookings', async (req, res) => {
     let data = [];
     let dbSuccess = false;
 
-    // 1. Try PostgreSQL
     try {
         if (process.env.DATABASE_URL) {
-            const result = await db.query('SELECT * FROM car_bookings ORDER BY created_at DESC');
+            const result = await db.query(
+                "SELECT * FROM car_bookings WHERE status != 'cancelled' ORDER BY created_at DESC"
+            );
             data = result.rows;
             dbSuccess = true;
         }
@@ -614,11 +754,11 @@ app.get('/api/admin/bookings', async (req, res) => {
         console.error('PostgreSQL Fetch Error:', pgError.message);
     }
 
-    // 2. Try Supabase
     if (!dbSuccess && supabase) {
         const { data: sbData, error } = await supabase
             .from('car_bookings')
             .select('*')
+            .neq('status', 'cancelled')
             .order('created_at', { ascending: false });
 
         if (!error) {
@@ -697,6 +837,12 @@ app.get('/api/admin/bookings', async (req, res) => {
             }
         }
 
+        // Extract extra fields from reason (plate/mileage appended)
+        const plateMatch = booking.reason?.match(/🚘\s*Гос\. номер:\s*([^\n]+)/);
+        const mileageMatch = booking.reason?.match(/📏\s*Пробег:\s*([^\n]+)/);
+        const plateText = plateMatch ? plateMatch[1].trim() : '';
+        const mileageText = mileageMatch ? mileageMatch[1].trim() : '';
+
         return {
             id: booking.id,
             title: `${booking.name} (${booking.car_brand})`,
@@ -706,7 +852,7 @@ app.get('/api/admin/bookings', async (req, res) => {
             status: booking.status || 'pending',
             clientName: booking.name,
             clientPhone: booking.phone,
-            carInfo: `${booking.car_brand} ${booking.car_model || ''}`,
+            carInfo: `${booking.car_brand} ${booking.car_model || ''}${plateText ? ' • ' + plateText : ''}${mileageText ? ' • ' + mileageText : ''}`,
             reason: booking.reason
         };
     });
@@ -787,32 +933,35 @@ app.post('/api/auth/telegram', (req, res) => {
     res.json({ success: true, user: { id: 12345, name: "Test User" } });
 });
 
-// Proxy for AI API (Supports Gemini and OpenRouter/Qwen)
 app.post('/api/ai-proxy', async (req, res) => {
     try {
         const { model, config, contents } = req.body;
+        let messages = [];
+        if (config && config.systemInstruction) {
+            messages.push({ role: "system", content: config.systemInstruction });
+        }
+        if (contents && Array.isArray(contents)) {
+            contents.forEach(item => {
+                const role = item.role === 'model' ? 'assistant' : 'user';
+                const text = item.parts && item.parts[0] ? item.parts[0].text : '';
+                if (text) {
+                    messages.push({ role, content: text });
+                }
+            });
+        }
+        if (process.env.GIGACHAT_AUTH_KEY) {
+            try {
+                const { getChatCompletionText } = require('./gigachat');
+                const text = await getChatCompletionText(messages, model);
+                if (text) {
+                    return res.json({ text });
+                }
+            } catch (e) {
+                console.error("GigaChat Error:", e);
+            }
+        }
         
-        // Priority 1: OpenRouter (Qwen)
         if (openAiClient) {
-             // Convert Google Gemini format to OpenAI format
-             let messages = [];
-             
-             // 1. System Prompt
-             if (config && config.systemInstruction) {
-                 messages.push({ role: "system", content: config.systemInstruction });
-             }
-
-             // 2. Chat History
-             if (contents && Array.isArray(contents)) {
-                 contents.forEach(item => {
-                     const role = item.role === 'model' ? 'assistant' : 'user';
-                     const text = item.parts && item.parts[0] ? item.parts[0].text : '';
-                     if (text) {
-                         messages.push({ role, content: text });
-                     }
-                 });
-             }
-
              const completion = await openAiClient.chat.completions.create({
                  model: "qwen/qwen-2.5-72b-instruct", // Upgrade to 72B for better instruction following
                  messages: messages,
@@ -946,6 +1095,8 @@ cron.schedule('0 10 * * *', async () => {
         // Send summary to admin
         await bot.sendMessage(adminChatId, message, { parse_mode: 'HTML' });
         console.log(`✅ Sent reminder summary for ${result.rows.length} bookings.`);
+        const plainForMax = message.replace(/<[^>]+>/g, '');
+        await sendMaxAdmin(plainForMax);
 
     } catch (error) {
         console.error('❌ Error in reminder cron job:', error);

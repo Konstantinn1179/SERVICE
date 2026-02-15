@@ -30,7 +30,7 @@ const CarSelector: React.FC<Props> = ({ onComplete, onCancel }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
       <div className="bg-gray-900 w-full max-w-md h-[80vh] sm:h-auto sm:max-h-[80vh] rounded-t-2xl sm:rounded-2xl flex flex-col shadow-2xl border border-gray-700 animate-slide-up">
         
         {/* Header */}
@@ -57,9 +57,9 @@ const CarSelector: React.FC<Props> = ({ onComplete, onCancel }) => {
                 <button
                   key={car.id}
                   onClick={() => handleBrandSelect(car.name)}
-                  className="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl text-center border border-gray-700 transition-all active:scale-95 flex flex-col items-center"
+                  className="bg-gray-800 hover:bg-gray-700 p-6 rounded-xl text-center border border-gray-700 transition-all active:scale-95 flex flex-col items-center"
                 >
-                  <span className="font-bold text-white text-lg">{car.name}</span>
+                  <span className="font-bold text-white text-2xl">{car.name}</span>
                 </button>
               ))}
               <button 
@@ -106,7 +106,7 @@ const CarSelector: React.FC<Props> = ({ onComplete, onCancel }) => {
                   <button
                     key={year}
                     onClick={() => handleYearSelect(year)}
-                    className="bg-gray-800 hover:bg-blue-600 hover:border-blue-500 hover:text-white p-2 rounded-lg text-center border border-gray-700 transition-all text-gray-300 text-sm font-semibold"
+                    className="bg-gray-800 hover:bg-blue-600 hover:border-blue-500 hover:text-white p-3 rounded-xl text-center border border-gray-700 transition-all text-gray-300 text-base font-bold"
                   >
                     {year}
                   </button>

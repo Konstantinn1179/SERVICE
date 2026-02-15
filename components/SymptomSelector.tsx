@@ -6,6 +6,7 @@ interface Props {
   onSelect: (text: string, rawItem?: string, type?: MenuLevel) => void;
   onCarSelect: () => void;
   onBooking: () => void;
+  onChat: () => void;
 }
 
 type MenuLevel = 'main' | 'repair' | 'maintenance' | 'consult' | 'prices';
@@ -49,8 +50,10 @@ const getIcon = (item: string, type: MenuLevel) => {
   return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />;
 };
 
-const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) => {
+const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking, onChat }) => {
   const [level, setLevel] = useState<MenuLevel>('main');
+  const [showPricesOverlay, setShowPricesOverlay] = useState(false);
+  const [showConsultOverlay, setShowConsultOverlay] = useState(false);
 
   const handleSelection = (item: string) => {
     let prefix = '';
@@ -67,18 +70,31 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
       
       {/* --- LEVEL 1: MAIN CATEGORIES (GRID ON MOBILE) --- */}
       {level === 'main' && (
-        <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:flex sm:flex-nowrap gap-3 sm:gap-4">
+          <button
+            onClick={onChat}
+            className="w-full sm:w-40 flex flex-col items-center justify-center h-32 sm:h-36 bg-green-900/20 hover:bg-green-900/40 rounded-xl border border-green-500/30 hover:border-green-500 transition-all active:scale-95 group p-4 sm:p-5 text-center"
+          >
+            <div className="mb-3 sm:mb-4 p-3 sm:p-3.5 bg-green-900/50 rounded-lg group-hover:bg-green-800 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-11 sm:w-11 text-green-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+            </div>
+            <span className="text-sm sm:text-base leading-tight text-green-200 group-hover:text-white font-bold uppercase tracking-wide">
+              Чат
+            </span>
+          </button>
           {/* 0. BOOKING (Prominent) */}
           <button
             onClick={onBooking}
-            className="flex flex-col items-center justify-center h-20 sm:w-28 sm:h-24 bg-blue-600 hover:bg-blue-500 rounded-xl border border-blue-400 hover:border-blue-300 transition-all active:scale-95 group p-1.5 sm:p-2 text-center shadow-lg shadow-blue-900/50"
+            className="w-full sm:w-40 flex flex-col items-center justify-center h-32 sm:h-36 bg-blue-900/20 hover:bg-blue-900/40 rounded-xl border border-blue-500/30 hover:border-blue-500 transition-all active:scale-95 group p-4 sm:p-5 text-center"
           >
-            <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-blue-800/50 rounded-lg group-hover:bg-blue-700 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="mb-3 sm:mb-4 p-3 sm:p-3.5 bg-blue-900/50 rounded-lg group-hover:bg-blue-800 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-11 sm:w-11 text-blue-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
             </div>
-            <span className="text-[9px] sm:text-[10px] leading-tight text-white font-bold uppercase tracking-wide">
+            <span className="text-sm sm:text-base leading-tight text-blue-200 group-hover:text-white font-bold uppercase tracking-wide">
               Записаться
             </span>
           </button>
@@ -86,7 +102,7 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
           {/* 1. Car Select */}
           <button
             onClick={onCarSelect}
-            className="flex flex-col items-center justify-center h-20 sm:w-28 sm:h-24 bg-blue-900/20 hover:bg-blue-900/40 rounded-xl border border-blue-500/30 hover:border-blue-500 transition-all active:scale-95 group p-1.5 sm:p-2 text-center"
+            className="hidden"
           >
             <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-blue-900/50 rounded-lg group-hover:bg-blue-800 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-blue-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -100,15 +116,15 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
 
           {/* 2. Prices Category */}
           <button
-            onClick={() => setLevel('prices')}
-            className="flex flex-col items-center justify-center h-20 sm:w-28 sm:h-24 bg-yellow-900/20 hover:bg-yellow-900/40 rounded-xl border border-yellow-500/30 hover:border-yellow-500 transition-all active:scale-95 group p-1.5 sm:p-2 text-center"
+            onClick={() => setShowPricesOverlay(true)}
+            className="w-full sm:w-40 flex flex-col items-center justify-center h-32 sm:h-36 bg-yellow-900/20 hover:bg-yellow-900/40 rounded-xl border border-yellow-500/30 hover:border-yellow-500 transition-all active:scale-95 group p-4 sm:p-5 text-center"
           >
-            <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-yellow-900/50 rounded-lg group-hover:bg-yellow-800 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="mb-3 sm:mb-4 p-3 sm:p-3.5 bg-yellow-900/50 rounded-lg group-hover:bg-yellow-800 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-11 sm:w-11 text-yellow-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <span className="text-[9px] sm:text-[10px] leading-tight text-yellow-200 group-hover:text-white font-bold uppercase tracking-wide">
+            <span className="text-sm sm:text-base leading-tight text-yellow-200 group-hover:text-white font-bold uppercase tracking-wide">
               Цены
             </span>
           </button>
@@ -116,7 +132,7 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
           {/* 3. Repair Category */}
           <button
             onClick={() => setLevel('repair')}
-            className="flex flex-col items-center justify-center h-20 sm:w-28 sm:h-24 bg-red-900/20 hover:bg-red-900/40 rounded-xl border border-red-500/30 hover:border-red-500 transition-all active:scale-95 group p-1.5 sm:p-2 text-center"
+            className="hidden"
           >
             <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-red-900/50 rounded-lg group-hover:bg-red-800 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-red-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -131,7 +147,7 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
           {/* 4. Maintenance Category */}
           <button
             onClick={() => setLevel('maintenance')}
-            className="flex flex-col items-center justify-center h-20 sm:w-28 sm:h-24 bg-green-900/20 hover:bg-green-900/40 rounded-xl border border-green-500/30 hover:border-green-500 transition-all active:scale-95 group p-1.5 sm:p-2 text-center"
+            className="hidden"
           >
             <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-green-900/50 rounded-lg group-hover:bg-green-800 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-green-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -145,15 +161,15 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
 
           {/* 5. Consult Category */}
           <button
-            onClick={() => setLevel('consult')}
-            className="flex flex-col items-center justify-center h-20 sm:w-28 sm:h-24 bg-gray-800 hover:bg-gray-750 rounded-xl border border-gray-700 hover:border-blue-400 transition-all active:scale-95 group p-1.5 sm:p-2 text-center"
+            onClick={() => setShowConsultOverlay(true)}
+            className="w-full sm:w-40 flex flex-col items-center justify-center h-32 sm:h-36 bg-red-900/20 hover:bg-red-900/40 rounded-xl border border-red-500/30 hover:border-red-500 transition-all active:scale-95 group p-4 sm:p-5 text-center"
           >
-            <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-gray-900 rounded-lg group-hover:bg-gray-800 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-gray-400 group-hover:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="mb-3 sm:mb-4 p-3 sm:p-3.5 bg-red-900/50 rounded-lg group-hover:bg-red-800 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-11 sm:w-11 text-red-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
               </svg>
             </div>
-            <span className="text-[9px] sm:text-[10px] leading-tight text-gray-400 group-hover:text-white font-bold uppercase tracking-wide">
+            <span className="text-sm sm:text-base leading-tight text-red-200 group-hover:text-white font-bold uppercase tracking-wide">
               Вопрос
             </span>
           </button>
@@ -195,6 +211,55 @@ const SymptomSelector: React.FC<Props> = ({ onSelect, onCarSelect, onBooking }) 
                  <SubMenuItem key={idx} item={item} type="consult" onClick={() => handleSelection(item)} />
               ))}
            </div>
+        </div>
+      )}
+      
+      {showPricesOverlay && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-4" onClick={() => setShowPricesOverlay(false)}>
+          <div className="absolute inset-0 bg-black/70"></div>
+          <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg sm:max-w-xl p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-lg font-bold text-white">Цены</div>
+              <button onClick={() => setShowPricesOverlay(false)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {PRICE_ITEMS.map((item, idx) => (
+                <PriceMenuItem 
+                  key={idx} 
+                  item={item} 
+                  onClick={() => {
+                    onSelect(`Сколько стоит ${item.title} (${item.price})`, item.title, 'prices');
+                    setShowPricesOverlay(false);
+                  }} 
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showConsultOverlay && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-4" onClick={() => setShowConsultOverlay(false)}>
+          <div className="absolute inset-0 bg-black/70"></div>
+          <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg sm:max-w-xl p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-lg font-bold text-white">Вопросы</div>
+              <button onClick={() => setShowConsultOverlay(false)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {CONSULT_TOPICS.map((item, idx) => (
+                <SubMenuItem 
+                  key={idx} 
+                  item={item} 
+                  type="consult" 
+                  onClick={() => {
+                    onSelect(`Вопрос: ${item}`, item, 'consult');
+                    setShowConsultOverlay(false);
+                  }} 
+                />
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -245,14 +310,14 @@ const SubMenuItem: React.FC<SubMenuItemProps> = ({ item, type, onClick }) => {
     return (
         <button
           onClick={onClick}
-          className={`flex-shrink-0 flex flex-col items-center justify-center w-24 h-20 sm:w-28 sm:h-24 bg-gray-800 hover:bg-gray-750 rounded-xl border ${borderColor} ${hoverBorder} transition-all active:scale-95 group p-1.5 sm:p-2 text-center`}
+          className={`flex-shrink-0 flex flex-col items-center justify-center w-28 h-24 sm:w-36 sm:h-28 bg-gray-800 hover:bg-gray-750 rounded-xl border ${borderColor} ${hoverBorder} transition-all active:scale-95 group p-2 sm:p-3 text-center`}
         >
-          <div className="mb-1 sm:mb-2 p-1 sm:p-1.5 bg-gray-900 rounded-lg group-hover:bg-gray-800 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 sm:h-6 sm:w-6 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="mb-2 sm:mb-3 p-2 sm:p-2.5 bg-gray-900 rounded-lg group-hover:bg-gray-800 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 sm:h-7 sm:w-7 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                {getIcon(item, type)}
             </svg>
           </div>
-          <span className="text-[9px] sm:text-[10px] leading-tight text-gray-400 group-hover:text-white font-medium line-clamp-2">
+          <span className="text-[11px] sm:text-xs leading-tight text-gray-400 group-hover:text-white font-medium line-clamp-2">
             {item}
           </span>
         </button>

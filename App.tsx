@@ -37,8 +37,15 @@ function App() {
   const path = window.location.pathname;
   const params = new URLSearchParams(window.location.search);
   const startParam = params.get('start');
+  const isChat = startParam === 'chat';
 
-  if (startParam === 'calendar' || path === '/admin/calendar' || path.startsWith('/admin/calendar')) {
+  if (
+    startParam === 'calendar' ||
+    startParam === 'admin' ||
+    path === '/admin' ||
+    path.startsWith('/admin') ||
+    path.startsWith('/max/admin')
+  ) {
     return <AdminCalendar />;
   }
 
@@ -59,6 +66,7 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const telegram = window.Telegram?.WebApp;
 
   // Initialize Chat & Telegram
@@ -265,7 +273,13 @@ function App() {
     }
   };
 
-  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number, platform?: string) => {
+  const formatDateDMY = (s: string) => {
+    if (!s) return '';
+    const p = s.split('-');
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s;
+  };
+  
+  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number, platform?: string, licensePlate?: string, mileage?: string) => {
     setIsLoading(true);
     try {
       // 1. Send to Backend
@@ -284,7 +298,9 @@ function App() {
             booking_date: bookingDate,
             booking_time: bookingTime,
             chat_id: chatId,
-            platform: platform
+            platform: platform,
+            license_plate: licensePlate,
+            mileage: mileage
         })
       });
 
@@ -296,7 +312,7 @@ function App() {
       // 2. Add system message
       setMessages(prev => [...prev, {
         role: 'system',
-        text: `✅ Заявка принята!\n\nИмя: ${name}\nТелефон: ${phone}\nАвто: ${brand} ${model} (${year})\nДата: ${bookingDate || 'Не указана'}\nВремя: ${bookingTime || 'Не указано'}\nПричина: ${reason}\n\nМастер свяжется с вами в ближайшее время.`,
+        text: `✅ Заявка принята!\n\nИмя: ${name}\nТелефон: ${phone}\nАвто: ${brand} ${model} (${year})${licensePlate ? `\nГос. номер: ${licensePlate}` : ''}${mileage ? `\nПробег: ${mileage} км` : ''}\nДата: ${bookingDate ? formatDateDMY(bookingDate) : 'Не указана'}\nВремя: ${bookingTime || 'Не указано'}\nПричина: ${reason}\n\nМастер свяжется с вами в ближайшее время.`,
         timestamp: new Date()
       }]);
       
@@ -324,22 +340,33 @@ function App() {
         
         {/* Main Chat Area */}
         <main className="flex-1 flex flex-col relative z-10 w-full">
-          <div className="flex-1 overflow-y-auto p-4 scrollbar-hide space-y-4 sm:space-y-6">
-            {messages.map((msg, index) => (
-              <ChatMessage key={index} message={msg} />
-            ))}
-            {isLoading && (
-              <div className="flex justify-start animate-pulse">
-                <div className="bg-gray-800 rounded-2xl px-4 py-3 text-gray-400 text-sm">
-                   Анализирую...
+          <div className="h-[40vh] sm:flex-1 overflow-y-auto p-4 scrollbar-hide space-y-4 sm:space-y-6">
+            {isChat ? (
+              <>
+                {messages.map((msg, index) => (
+                  <ChatMessage key={index} message={msg} />
+                ))}
+                {isLoading && (
+                  <div className="flex justify-start animate-pulse">
+                    <div className="bg-gray-800 rounded-2xl px-4 py-3 text-gray-400 text-sm">
+                       Анализирую...
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center space-y-3">
+                  <div className="text-xl font-bold">Здравствуйте!</div>
+                  <div className="text-sm text-gray-400">Выберите раздел ниже</div>
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
 
           {/* Booking Alert */}
-          {bookingReady && (
+          {isChat && bookingReady && (
             <div className="px-4 py-2 bg-gray-900/90 backdrop-blur-sm animate-fade-in-up">
               <div className="bg-gradient-to-r from-green-600 to-green-800 rounded-lg p-3 flex items-center justify-between shadow-lg">
                 <span className="text-sm font-semibold text-white">Готовы записаться?</span>
@@ -354,7 +381,7 @@ function App() {
           )}
 
           {/* Quick Buttons (AI Generated) */}
-          {!isLoading && quickButtons.length > 0 && (
+          {isChat && !isLoading && quickButtons.length > 0 && (
             <div className="px-4 pb-2 pt-2 bg-gray-900/95 overflow-x-auto whitespace-nowrap scrollbar-hide">
               <div className="flex space-x-2">
                 {quickButtons.map((btn, idx) => (
@@ -374,14 +401,25 @@ function App() {
           <div className="bg-gray-900 border-t border-gray-800 pt-1 pb-safe">
              
              {/* Permanent Symptom Bar with Car Selector */}
-             <SymptomSelector 
+            <SymptomSelector 
                 onSelect={handleMenuSelection} 
                 onCarSelect={() => setShowCarSelector(true)}
                 onBooking={() => setShowBookingForm(true)}
+                onChat={() => {
+                  if (isChat) {
+                    inputRef.current?.focus();
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  } else {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('start', 'chat');
+                    window.location.href = url.toString();
+                  }
+                }}
              />
 
-             {/* Input Field */}
-             <div className="p-2 sm:p-4 flex space-x-2">
+            {/* Input Field */}
+            {isChat && (
+            <div className="p-2 sm:p-4 flex space-x-2">
                  {/* Voice Button */}
                  <button
                   onClick={startListening}
@@ -404,6 +442,7 @@ function App() {
                   placeholder={isListening ? "Говорите..." : "Опишите проблему"}
                   className="flex-1 bg-gray-800 text-white placeholder-gray-500 border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm sm:text-base"
                   disabled={isLoading}
+                  ref={inputRef}
                 />
                 <button
                   onClick={() => handleSendMessage(inputValue)}
@@ -414,7 +453,8 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
                   </svg>
                 </button>
-             </div>
+            </div>
+            )}
           </div>
         </main>
 
@@ -477,6 +517,7 @@ function App() {
               initialModel={vehicleCard.model || ''}
               initialYear={vehicleCard.year?.substring(0, 4) || ''}
               initialReason={vehicleCard.symptoms?.join(', ') || ''}
+              onOpenCarSelector={() => setShowCarSelector(true)}
               onSubmit={handleBookingSubmit}
               onCancel={() => setShowBookingForm(false)}
             />

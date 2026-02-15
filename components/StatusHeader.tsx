@@ -25,6 +25,14 @@ const textMap: Record<StatusColor, string> = {
 };
 
 const StatusHeader: React.FC<Props> = ({ status, branch, onInfoClick }) => {
+  const params = new URLSearchParams(window.location.search);
+  const platform = params.get('platform') || undefined;
+  const adminUrl = platform ? `/admin?platform=${platform}` : '/admin';
+  const adminIdEnv = (import.meta as any).env?.VITE_ADMIN_CHAT_ID as string | undefined;
+  const tgId = window?.Telegram?.WebApp?.initDataUnsafe?.user?.id?.toString();
+  const isAdminParam = params.get('admin') === '1';
+  const isAdminEnvMatch = !!adminIdEnv && !!tgId && adminIdEnv === tgId;
+  const isAdmin = isAdminParam || isAdminEnvMatch;
   return (
     <div className="flex items-center justify-between bg-gray-900 border-b border-gray-800 p-3 sm:p-4 sticky top-0 z-20">
       <div className="flex items-center space-x-3">
@@ -63,6 +71,17 @@ const StatusHeader: React.FC<Props> = ({ status, branch, onInfoClick }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
              </svg>
           </button>
+          
+          {/* Admin Calendar Link (only visible to admin) */}
+          {isAdmin && (
+            <a 
+               href={adminUrl}
+               className="ml-2 px-3 py-1.5 text-xs font-semibold rounded bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-700 transition-colors"
+               title="Открыть календарь администратора"
+            >
+               Календарь
+            </a>
+          )}
       </div>
     </div>
   );
