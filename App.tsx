@@ -38,7 +38,9 @@ function App() {
   const path = window.location.pathname;
   const params = new URLSearchParams(window.location.search);
   const startParam = params.get('start');
+  const platformParam = params.get('platform');
   const isChat = startParam === 'chat';
+  const isAdminPlatform = platformParam === 'max';
 
   if (
     startParam === 'calendar' ||
@@ -75,6 +77,7 @@ function App() {
   const [showMobileInfo, setShowMobileInfo] = useState(false); 
   
   const [isListening, setIsListening] = useState(false);
+  const [menuExpanded, setMenuExpanded] = useState(() => !isChat);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -348,6 +351,17 @@ function App() {
          onInfoClick={() => setShowMobileInfo(true)} 
       />
 
+      {isAdminPlatform && (
+        <div className="px-4 pt-2 flex justify-end">
+          <a
+            href="/admin/calendar?platform=max"
+            className="inline-flex items-center px-3 py-1.5 rounded-full border border-gray-600 bg-gray-800 text-xs font-semibold text-gray-100 hover:bg-gray-700 hover:border-gray-400 transition-colors"
+          >
+            Календарь администратора
+          </a>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden relative">
         
         {/* Main Chat Area */}
@@ -412,22 +426,36 @@ function App() {
           {/* Bottom Control Area */}
           <div className="bg-gray-900 border-t border-gray-800 pt-1 pb-safe">
              
-             {/* Permanent Symptom Bar with Car Selector */}
-            <SymptomSelector 
-                onSelect={handleMenuSelection} 
-                onCarSelect={() => setShowCarSelector(true)}
-                onBooking={() => setShowBookingForm(true)}
-                onChat={() => {
-                  if (isChat) {
-                    inputRef.current?.focus();
-                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('start', 'chat');
-                    window.location.href = url.toString();
-                  }
-                }}
-             />
+             {isChat && !menuExpanded && (
+               <div className="px-3 sm:px-4 pb-2">
+                 <button
+                   type="button"
+                   onClick={() => setMenuExpanded(true)}
+                   className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-xl bg-gray-800 border border-gray-700 text-xs sm:text-sm font-semibold text-gray-100 hover:bg-gray-700 hover:border-gray-500 transition-colors"
+                 >
+                   Меню
+                 </button>
+               </div>
+             )}
+
+             {(!isChat || menuExpanded) && (
+              <SymptomSelector 
+                  onSelect={handleMenuSelection} 
+                  onCarSelect={() => setShowCarSelector(true)}
+                  onBooking={() => setShowBookingForm(true)}
+                  onChat={() => {
+                    if (isChat) {
+                      setMenuExpanded(false);
+                      inputRef.current?.focus();
+                      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                      const url = new URL(window.location.href);
+                      url.searchParams.set('start', 'chat');
+                      window.location.href = url.toString();
+                    }
+                  }}
+               />
+             )}
 
             {/* Input Field */}
             {isChat && (

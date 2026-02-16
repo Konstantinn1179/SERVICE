@@ -275,17 +275,17 @@ const PriceMenuItem: React.FC<PriceMenuItemProps> = ({ item, onClick }) => {
     return (
         <button
           onClick={onClick}
-          className="flex-shrink-0 flex flex-col items-center justify-center w-32 h-20 sm:w-36 sm:h-24 bg-gray-800 hover:bg-gray-750 rounded-xl border border-gray-700 hover:border-yellow-500 transition-all active:scale-95 group p-1.5 sm:p-2 text-center"
+          className="flex-shrink-0 flex flex-col items-center justify-center w-36 h-24 sm:w-40 sm:h-28 bg-yellow-900/15 hover:bg-yellow-900/30 rounded-xl border border-yellow-500/50 hover:border-yellow-400 transition-all active:scale-95 group p-2 sm:p-3 text-center"
         >
-          <div className="mb-1 p-1 bg-yellow-900/30 rounded-lg group-hover:bg-yellow-900/50 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="mb-1.5 sm:mb-2 p-2 sm:p-2.5 bg-yellow-900/40 rounded-lg group-hover:bg-yellow-800 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <span className="text-[9px] sm:text-[10px] leading-tight text-gray-300 font-medium mb-1 line-clamp-1">
+          <span className="text-[10px] sm:text-xs leading-tight text-yellow-50 font-semibold mb-1 line-clamp-1">
             {item.title}
           </span>
-          <span className="text-[10px] sm:text-xs font-bold text-white bg-gray-700 px-2 py-0.5 rounded-full group-hover:bg-yellow-600 transition-colors">
+          <span className="text-[10px] sm:text-xs font-bold text-gray-900 bg-yellow-300 px-2 py-0.5 rounded-full group-hover:bg-yellow-200 transition-colors">
             {item.price}
           </span>
         </button>
@@ -305,12 +305,14 @@ const SubMenuItem: React.FC<SubMenuItemProps> = ({ item, type, onClick }) => {
     
     if (type === 'repair') { iconColor = 'text-red-400'; hoverBorder = 'hover:border-red-500'; }
     if (type === 'maintenance') { iconColor = 'text-green-400'; hoverBorder = 'hover:border-green-500'; }
-    if (type === 'consult') { iconColor = 'text-blue-400'; hoverBorder = 'hover:border-blue-500'; }
+    if (type === 'consult') { borderColor = 'border-red-600/60'; hoverBorder = 'hover:border-red-500'; iconColor = 'text-red-300'; }
 
     return (
         <button
           onClick={onClick}
-          className={`flex-shrink-0 flex flex-col items-center justify-center w-28 h-24 sm:w-36 sm:h-28 bg-gray-800 hover:bg-gray-750 rounded-xl border ${borderColor} ${hoverBorder} transition-all active:scale-95 group p-2 sm:p-3 text-center`}
+          className={`flex-shrink-0 flex flex-col items-center justify-center w-28 h-24 sm:w-36 sm:h-28 ${
+            type === 'consult' ? 'bg-red-900/20 hover:bg-red-900/35' : 'bg-gray-800 hover:bg-gray-750'
+          } rounded-xl border ${borderColor} ${hoverBorder} transition-all active:scale-95 group p-2 sm:p-3 text-center`}
         >
           <div className="mb-2 sm:mb-3 p-2 sm:p-2.5 bg-gray-900 rounded-lg group-hover:bg-gray-800 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 sm:h-7 sm:w-7 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -212,6 +212,26 @@ const AdminCalendar: React.FC = () => {
         .rbc-time-header-content {
           border-color: #000 !important;
         }
+        .rbc-agenda-view table {
+          width: 100% !important;
+          table-layout: fixed !important;
+          border-collapse: collapse !important;
+        }
+        .rbc-agenda-view .rbc-agenda-table th,
+        .rbc-agenda-view .rbc-agenda-table td {
+          border: 1px solid #000 !important;
+          padding: 6px 8px;
+          vertical-align: middle;
+        }
+        .rbc-agenda-view .rbc-agenda-date-cell {
+          width: 20%;
+        }
+        .rbc-agenda-view .rbc-agenda-time-cell {
+          width: 20%;
+        }
+        .rbc-agenda-view .rbc-agenda-event-cell {
+          width: 60%;
+        }
         .rbc-month-view,
         .rbc-time-view,
         .rbc-time-content,
@@ -226,7 +246,9 @@ const AdminCalendar: React.FC = () => {
       <div className="bg-white text-black p-4 flex justify-between items-center border-b border-black z-10">
         <div className="flex items-center space-x-4">
              <h1 className="text-xl font-bold">АКПП-Центр | Календарь</h1>
-             <span className="text-sm">Панель администратора</span>
+             <span className="text-sm px-3 py-1.5 rounded-full border border-black bg-gray-100">
+               Панель администратора
+             </span>
         </div>
         <div className="flex items-center space-x-3">
              <button 
@@ -236,7 +258,12 @@ const AdminCalendar: React.FC = () => {
              >
                 🔄
              </button>
-             <a href="/" className="text-sm hover:underline text-black">В чат</a>
+             <a 
+               href="/?platform=max&start=chat&from=admin" 
+               className="text-sm px-3 py-1.5 border border-black rounded-full hover:bg-gray-200 transition-colors text-black"
+             >
+               В чат
+             </a>
         </div>
       </div>
 
