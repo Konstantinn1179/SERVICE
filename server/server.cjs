@@ -556,6 +556,10 @@ const sendMaxMessage = async ({ chatId, userId, text }) => {
 
 const sendMaxAdmin = async (text) => {
     try {
+        const webAppUrl = process.env.WEB_APP_URL || 'https://lasermehanizm.tb.ru';
+        const calendarUrl = `${webAppUrl}/admin/calendar?platform=max`;
+        const fullText = `${text}\n\nОткрыть календарь администратора:\n${calendarUrl}`;
+
         const raw = (process.env.MAX_ADMIN_USER_ID || '')
             .split(',')
             .map(s => s.trim())
@@ -565,7 +569,7 @@ const sendMaxAdmin = async (text) => {
             console.warn('MAX_ADMIN_USER_ID не задан или не содержит числовой ID.');
             return;
         }
-        await sendMaxMessage({ userId: Number(id), chatId: null, text });
+        await sendMaxMessage({ userId: Number(id), chatId: null, text: fullText });
     } catch (err) {
         console.error('Ошибка отправки сообщения администратору MAX:', err && err.message);
     }
@@ -789,21 +793,9 @@ app.post('/api/bookings', async (req, res) => {
         const plateStr = license_plate ? `\n🚘 <b>Гос. номер:</b> ${license_plate}` : '';
         const mileageStr = mileage ? `\n📏 <b>Пробег:</b> ${mileage} км` : '';
         const message = `🔔 <b>Новая заявка!</b>\n\n👤 <b>Имя:</b> ${name}\n📱 <b>Телефон:</b> ${phone}\n🚗 <b>Авто:</b> ${car_brand} ${fullModel}${plateStr}${mileageStr}${dateStr}${timeStr}\n🔧 <b>Причина:</b> ${reason || 'Не указана'}`;
-        
-        const opts = {
-            parse_mode: 'HTML',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '✅ Подтвердить', callback_data: `confirm_${bookingId}` },
-                        { text: '❌ Отменить', callback_data: `cancel_${bookingId}` }
-                    ]
-                ]
-            }
-        };
 
         try {
-            await bot.sendMessage(adminChatId, message, opts);
+            await bot.sendMessage(adminChatId, message, { parse_mode: 'HTML' });
             console.log('Telegram notification sent to', adminChatId);
             const plainForMax = message.replace(/<[^>]+>/g, '');
             await sendMaxAdmin(plainForMax);
