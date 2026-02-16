@@ -18,7 +18,8 @@ import StatusHeader from './components/StatusHeader';
 import CarSelector from './components/CarSelector';
 import SymptomSelector from './components/SymptomSelector';
 import BookingForm from './components/BookingForm';
-import AdminCalendar from './components/AdminCalendar';
+
+const AdminCalendar = React.lazy(() => import('./components/AdminCalendar'));
 
 // --- CONFIGURATION ---
 // Используем прокси Vite для локальной разработки и относительный путь для продакшена
@@ -46,7 +47,17 @@ function App() {
     path.startsWith('/admin') ||
     path.startsWith('/max/admin')
   ) {
-    return <AdminCalendar />;
+    return (
+      <React.Suspense
+        fallback={
+          <div className="flex items-center justify-center h-[100dvh] bg-gray-900 text-gray-100">
+            Загрузка календаря...
+          </div>
+        }
+      >
+        <AdminCalendar />
+      </React.Suspense>
+    );
   }
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -279,7 +290,7 @@ function App() {
     return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s;
   };
   
-  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number, platform?: string, licensePlate?: string, mileage?: string) => {
+  const handleBookingSubmit = async (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number, platform?: string, licensePlate?: string, mileage?: string, callbackOnly?: boolean) => {
     setIsLoading(true);
     try {
       // 1. Send to Backend
@@ -300,7 +311,8 @@ function App() {
             chat_id: chatId,
             platform: platform,
             license_plate: licensePlate,
-            mileage: mileage
+            mileage: mileage,
+            callback_only: callbackOnly
         })
       });
 
@@ -312,7 +324,7 @@ function App() {
       // 2. Add system message
       setMessages(prev => [...prev, {
         role: 'system',
-        text: `✅ Заявка принята!\n\nИмя: ${name}\nТелефон: ${phone}\nАвто: ${brand} ${model} (${year})${licensePlate ? `\nГос. номер: ${licensePlate}` : ''}${mileage ? `\nПробег: ${mileage} км` : ''}\nДата: ${bookingDate ? formatDateDMY(bookingDate) : 'Не указана'}\nВремя: ${bookingTime || 'Не указано'}\nПричина: ${reason}\n\nМастер свяжется с вами в ближайшее время.`,
+        text: `✅ Заявка принята!\n\nИмя: ${name}\nТелефон: ${phone}\nАвто: ${brand} ${model} (${year})${licensePlate ? `\nГос. номер: ${licensePlate}` : ''}${mileage ? `\nПробег: ${mileage} км` : ''}\nДата: ${bookingDate ? formatDateDMY(bookingDate) : callbackOnly ? 'Будет согласована по телефону' : 'Не указана'}\nВремя: ${bookingTime || (callbackOnly ? 'Будет согласовано по телефону' : 'Не указано')}\nПричина: ${reason}\n\nМастер свяжется с вами в ближайшее время.`,
         timestamp: new Date()
       }]);
       

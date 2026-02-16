@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { COMMON_SYMPTOMS, MAINTENANCE_TYPES } from '../services/carData';
 
 interface Props {
-  onSubmit: (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number, platform?: string, licensePlate?: string, mileage?: string) => void;
+  onSubmit: (name: string, phone: string, brand: string, model: string, year: string, reason: string, bookingDate: string, bookingTime: string, chatId?: number, platform?: string, licensePlate?: string, mileage?: string, callbackOnly?: boolean) => void;
   onCancel: () => void;
   onOpenCarSelector?: () => void;
   initialName?: string;
@@ -28,7 +28,6 @@ const BookingForm: React.FC<Props> = ({
   const [model, setModel] = useState(initialModel);
   const [year, setYear] = useState(initialYear);
   const [bookingDate, setBookingDate] = useState('');
-  const [bookingDateDisplay, setBookingDateDisplay] = useState('');
   const [bookingTime, setBookingTime] = useState('');
   const [reason, setReason] = useState(initialReason);
   const [agreed, setAgreed] = useState(false);
@@ -42,6 +41,7 @@ const BookingForm: React.FC<Props> = ({
   const [showMaintenanceOverlay, setShowMaintenanceOverlay] = useState(false);
   const [selectedRepairs, setSelectedRepairs] = useState<string[]>([]);
   const [selectedMaintenance, setSelectedMaintenance] = useState<string[]>([]);
+  const [callbackOnly, setCallbackOnly] = useState(false);
 
   // Update fields if initial props change (e.g. after async analysis completes)
   useEffect(() => {
@@ -64,12 +64,12 @@ const BookingForm: React.FC<Props> = ({
   const DEFAULT_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
 
   React.useEffect(() => {
-    if (bookingDate) {
+    if (bookingDate && !callbackOnly) {
       fetchSlots(bookingDate);
     } else {
         setAvailableSlots([]);
     }
-  }, [bookingDate]);
+  }, [bookingDate, callbackOnly]);
 
   const fetchSlots = async (date: string) => {
     setLoadingSlots(true);
@@ -139,24 +139,38 @@ const BookingForm: React.FC<Props> = ({
     setLicensePlate(raw);
   };
   
-  const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/\D/g, '').slice(0, 8);
-    let display = val;
-    if (val.length > 2) display = val.slice(0, 2) + '/' + val.slice(2);
-    if (val.length > 4) display = display.slice(0, 5) + '/' + val.slice(4);
-    setBookingDateDisplay(display);
-    if (val.length === 8) {
-      const dd = val.slice(0, 2);
-      const mm = val.slice(2, 4);
-      const yyyy = val.slice(4);
-      const iso = `${yyyy}-${mm}-${dd}`;
-      const d = new Date(`${iso}T00:00:00`);
-      if (!isNaN(d.getTime())) {
-        setBookingDate(iso);
-        return;
-      }
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const iso = e.target.value;
+    setError('');
+    setBookingTime('');
+    if (!iso) {
+      setBookingDate('');
+      return;
     }
-    setBookingDate('');
+    const date = new Date(iso + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (date < today) {
+      setError('Нельзя записаться на прошедшую дату.');
+      setBookingDate('');
+      return;
+    }
+    const day = date.getDay();
+    if (day === 0 || day === 6) {
+      setError('Сервис работает Пн–Пт. Выберите будний день.');
+      setBookingDate('');
+      return;
+    }
+    setBookingDate(iso);
+  };
+
+  const formatDisplayDate = (iso: string) => {
+    if (!iso) return '';
+    const p = iso.split('-');
+    if (p.length !== 3) return iso;
+    return `${p[2]}/${p[1]}/${p[0]}`;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -174,21 +188,29 @@ const BookingForm: React.FC<Props> = ({
       setError('Необходимо согласие на обработку данных.');
       return;
     }
-    if (!bookingDate) {
-      setError('Выберите дату записи.');
-      return;
-    }
-    if (!bookingTime) {
-      setError('Выберите время записи.');
-      return;
+    if (!callbackOnly) {
+      if (!bookingDate) {
+        setError('Выберите дату записи.');
+        return;
+      }
+      if (!bookingTime) {
+        setError('Выберите время записи.');
+        return;
+      }
     }
 
     setError('');
     const chatId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     const params = new URLSearchParams(window.location.search);
     const platformParam = params.get('platform') || (window.Telegram?.WebApp ? 'telegram' : undefined);
-    onSubmit(name, phone, brand, model, year, reason, bookingDate, bookingTime, chatId, platformParam || 'web', licensePlate, mileage);
+    onSubmit(name, phone, brand, model, year, reason, bookingDate, bookingTime, chatId, platformParam || 'web', licensePlate, mileage, callbackOnly);
   };
+
+  const submitDisabled =
+    name.length < 2 ||
+    phone.length < 18 ||
+    !agreed ||
+    (!callbackOnly && (!bookingDate || !bookingTime));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto">
@@ -501,23 +523,27 @@ const BookingForm: React.FC<Props> = ({
                 <div>
                   <label className="block text-xs text-gray-400 mb-1 ml-1">Дата</label>
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    value={bookingDateDisplay}
-                    onChange={handleDateInputChange}
-                    placeholder="дд/мм/гггг"
+                    type="date"
+                    value={bookingDate}
+                    onChange={handleDateChange}
+                    min={todayIso}
+                    disabled={callbackOnly}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-600 text-sm"
                   />
-                  {bookingDateDisplay && (
-                    <div className="text-[11px] text-gray-400 mt-1">Выбрано: {bookingDateDisplay}</div>
+                  {bookingDate && (
+                    <div className="text-[11px] text-gray-400 mt-1">Выбрано: {formatDisplayDate(bookingDate)}</div>
                   )}
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1 ml-1">Время</label>
-                  {!bookingDate ? (
-                     <div className="text-gray-500 text-sm py-2 px-1">Выберите дату</div>
+                  {callbackOnly ? (
+                    <div className="text-gray-400 text-sm py-2 px-1">
+                      Мы перезвоним и согласуем дату и время.
+                    </div>
+                  ) : !bookingDate ? (
+                    <div className="text-gray-500 text-sm py-2 px-1">Сначала выберите дату</div>
                   ) : loadingSlots ? (
-                     <div className="text-gray-400 text-sm py-2 animate-pulse">Загрузка...</div>
+                    <div className="text-gray-400 text-sm py-2 animate-pulse">Загрузка...</div>
                   ) : availableSlots.length > 0 ? (
                     <div className="grid grid-cols-3 gap-1.5">
                       {availableSlots.map((slot) => (
@@ -538,10 +564,30 @@ const BookingForm: React.FC<Props> = ({
                   ) : (
                     <div className="text-red-400 text-sm py-2">Нет мест</div>
                   )}
-                  {bookingDate && !loadingSlots && calendarUnavailable && (
+                  {bookingDate && !loadingSlots && calendarUnavailable && !callbackOnly && (
                     <div className="text-[11px] text-yellow-400 mt-1">Календарь недоступен, выберите ориентировочное время</div>
                   )}
                 </div>
+            </div>
+
+            <div className="flex items-center mt-1">
+              <input
+                id="callback-only"
+                type="checkbox"
+                checked={callbackOnly}
+                onChange={(e) => {
+                  setCallbackOnly(e.target.checked);
+                  setError('');
+                  if (e.target.checked) {
+                    setBookingDate('');
+                    setBookingTime('');
+                  }
+                }}
+                className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
+              />
+              <label htmlFor="callback-only" className="ml-2 text-xs text-gray-400">
+                Нужен обратный звонок, дату и время согласовать по телефону
+              </label>
             </div>
 
             <div>
@@ -579,9 +625,9 @@ const BookingForm: React.FC<Props> = ({
 
             <button
               type="submit"
-              disabled={!bookingDate || !bookingTime}
+              disabled={submitDisabled}
               className={`w-full font-bold py-3 rounded-xl shadow-lg transition-all active:scale-[0.98] mt-2 ${
-                !bookingDate || !bookingTime
+                submitDisabled
                   ? 'bg-gray-700 text-gray-300 cursor-not-allowed shadow-gray-900/10'
                   : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white shadow-blue-900/20'
               }`}

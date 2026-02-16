@@ -696,18 +696,33 @@ app.get('/api/slots', async (req, res) => {
 
 // Create a new booking
 app.post('/api/bookings', async (req, res) => {
-    const { name, phone, car_brand, car_model, year, reason, booking_date, booking_time, chat_id, platform, license_plate, mileage } = req.body;
+    const { name, phone, car_brand, car_model, year, reason, booking_date, booking_time, chat_id, platform, license_plate, mileage, callback_only } = req.body;
+
+    const isCallbackOnly = Boolean(callback_only);
 
     // Basic validation
     if (!name || !phone) {
         return res.status(400).json({ error: 'Имя и телефон обязательны' });
     }
 
+    if (!isCallbackOnly && booking_date) {
+        const date = new Date(booking_date + 'T00:00:00');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (date < today) {
+            return res.status(400).json({ error: 'Нельзя записаться на прошедшую дату.' });
+        }
+        const day = date.getDay();
+        if (day === 0 || day === 6) {
+            return res.status(400).json({ error: 'Сервис работает Пн–Пт. Выберите будний день.' });
+        }
+    }
+
     // Combine model and year if year is provided
     const fullModel = year ? `${car_model} (${year})` : car_model;
 
     // Check Google Calendar Availability first
-    if (booking_date && booking_time) {
+    if (!isCallbackOnly && booking_date && booking_time) {
         const isAvailable = await checkAvailability(booking_date, booking_time);
         if (!isAvailable) {
             return res.status(409).json({ 
@@ -716,9 +731,8 @@ app.post('/api/bookings', async (req, res) => {
         }
     }
 
-    // WORKAROUND: Since 'booking_date' and 'booking_time' columns might not exist in Supabase yet,
-    // we append them to the 'reason' field for storage, but keep them separate for Telegram notifications.
     let storedReason = reason || '';
+    if (isCallbackOnly) storedReason = `Нужен обратный звонок\n` + storedReason;
     if (booking_date) storedReason += `\n📅 Дата: ${booking_date}`;
     if (booking_time) storedReason += `\n⏰ Время: ${booking_time}`;
     if (platform) storedReason += `\n🟦 Платформа: ${platform}`;
@@ -792,7 +806,8 @@ app.post('/api/bookings', async (req, res) => {
 
         const plateStr = license_plate ? `\n🚘 <b>Гос. номер:</b> ${license_plate}` : '';
         const mileageStr = mileage ? `\n📏 <b>Пробег:</b> ${mileage} км` : '';
-        const message = `🔔 <b>Новая заявка!</b>\n\n👤 <b>Имя:</b> ${name}\n📱 <b>Телефон:</b> ${phone}\n🚗 <b>Авто:</b> ${car_brand} ${fullModel}${plateStr}${mileageStr}${dateStr}${timeStr}\n🔧 <b>Причина:</b> ${reason || 'Не указана'}`;
+        const callbackStr = callback_only ? `\n📞 <b>Нужен обратный звонок</b>` : '';
+        const message = `🔔 <b>Новая заявка!</b>\n\n👤 <b>Имя:</b> ${name}\n📱 <b>Телефон:</b> ${phone}\n🚗 <b>Авто:</b> ${car_brand} ${fullModel}${plateStr}${mileageStr}${dateStr}${timeStr}${callbackStr}\n🔧 <b>Причина:</b> ${reason || 'Не указана'}`;
 
         try {
             await bot.sendMessage(adminChatId, message, { parse_mode: 'HTML' });
@@ -807,7 +822,7 @@ app.post('/api/bookings', async (req, res) => {
     }
 
     // Add to Google Calendar
-    if (booking_date && booking_time) {
+    if (!isCallbackOnly && booking_date && booking_time) {
         await addCalendarEvent({ 
             name, 
             phone, 
@@ -819,6 +834,27 @@ app.post('/api/bookings', async (req, res) => {
             license_plate,
             mileage
         });
+    }
+
+    if (bot && chat_id) {
+        try {
+            if (!isCallbackOnly && booking_date && booking_time) {
+                const confirmKeyboard = {
+                    inline_keyboard: [
+                        [
+                            { text: '❌ Отменить запись', callback_data: `client_cancel_${data[0].id || 'unknown'}` }
+                        ]
+                    ]
+                };
+                const clientMessage = `👋 ${name}, вы записаны на консультацию в АКПП-центр.\n\n📅 Дата: ${booking_date}\n⏰ Время: ${booking_time}\n\nЕсли планы изменятся, вы можете отменить запись кнопкой ниже.`;
+                await bot.sendMessage(chat_id, clientMessage, { reply_markup: confirmKeyboard });
+            } else if (isCallbackOnly) {
+                const clientMessage = `👋 ${name}, заявка принята.\nМы свяжемся с вами по телефону для уточнения даты и времени.`;
+                await bot.sendMessage(chat_id, clientMessage);
+            }
+        } catch (e) {
+            console.error('Failed to send client confirmation:', e && e.message);
+        }
     }
 
     res.status(201).json({ success: true, data });
