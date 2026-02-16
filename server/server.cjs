@@ -13,8 +13,74 @@ const cron = require('node-cron');
 const { GoogleGenAI } = require('@google/genai');
 const OpenAI = require('openai');
 
-// Lazy MAX Bot API client
+// Lazy MAX Bot API client + long polling bot
 let maxApiPromise = null;
+let maxBotInstance = null;
+let maxBotStarted = false;
+
+const startMaxBotIfNeeded = () => {
+    if (!maxBotInstance || maxBotStarted) return;
+    maxBotStarted = true;
+
+    try {
+        const webAppUrl = process.env.WEB_APP_URL || 'https://lasermehanizm.tb.ru';
+
+        maxBotInstance.on('message_created', async (ctx) => {
+            try {
+                const msg = ctx.message || {};
+                const sender = msg.sender || {};
+                const chat = msg.recipient || {};
+
+                const userId = sender.userId;
+                const username = sender.username;
+                const chatId = chat.chatId;
+
+                console.log('MAX message_created:', {
+                    userId,
+                    username,
+                    chatId,
+                    text: msg.body?.text || ''
+                });
+
+                const raw = (process.env.MAX_ADMIN_USER_ID || '')
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+
+                const idList = raw.filter(v => /^\d+$/.test(v));
+                const usernameList = raw.filter(v => !/^\d+$/.test(v));
+
+                const isAdminById = userId && idList.includes(String(userId));
+                const isAdminByUsername = username && usernameList.includes(String(username));
+                const isAdmin = Boolean(isAdminById || isAdminByUsername);
+
+                const link = `${webAppUrl}?platform=max&start=chat`;
+                const calendarUrl = `${webAppUrl}/admin/calendar?platform=max`;
+
+                if (!isAdmin) {
+                    const text = `Здравствуйте! Я виртуальный помощник АКПП-центра.\n\nДля консультации и записи на сервис откройте приложение:\n${link}`;
+                    await ctx.reply(text);
+                } else {
+                    const userText = msg.body?.text || '';
+                    const text = `Админ, я получил от вас сообщение:\n"${userText}"\n\nОткрыть календарь администратора:\n${calendarUrl}`;
+                    await ctx.reply(text);
+                }
+            } catch (err) {
+                console.error('Ошибка обработчика MAX message_created:', err && err.message);
+            }
+        });
+
+        maxBotInstance.catch((err) => {
+            console.error('Необработанная ошибка MAX бота:', err && err.message);
+        });
+
+        maxBotInstance.start();
+        console.log('MAX бот запущен (long polling).');
+    } catch (err) {
+        console.error('Не удалось запустить MAX бота:', err && err.message);
+    }
+};
+
 const getMaxApi = async () => {
     if (!process.env.MAX_BOT_TOKEN) return null;
     if (!maxApiPromise) {
@@ -22,6 +88,8 @@ const getMaxApi = async () => {
             .then(mod => {
                 const { Bot } = mod;
                 const bot = new Bot(process.env.MAX_BOT_TOKEN);
+                maxBotInstance = bot;
+                startMaxBotIfNeeded();
                 return bot.api;
             })
             .catch(err => {
@@ -61,6 +129,13 @@ if (openRouterKey) {
     console.log("OpenAI/OpenRouter клиент инициализирован.");
 } else {
     console.warn("OPENROUTER_API_KEY не установлен. Функции Qwen/OpenRouter не будут работать.");
+}
+
+// Proactively initialize MAX bot (long polling) on startup
+if (process.env.MAX_BOT_TOKEN) {
+    getMaxApi()
+        .then(() => console.log('MAX API и бот инициализированы.'))
+        .catch(err => console.error('Ошибка старта MAX:', err && err.message));
 }
 
 
@@ -293,6 +368,26 @@ app.get('/api/health', (req, res) => {
         web_app_url_set: !!process.env.WEB_APP_URL,
         uptime_sec: Math.floor(process.uptime()),
     });
+});
+
+app.get('/api/max/status', async (req, res) => {
+    try {
+        const api = await getMaxApi();
+        const ready = !!api;
+        res.json({ ok: true, api_ready: ready });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'MAX status error' });
+    }
+});
+
+app.post('/api/max/test', async (req, res) => {
+    try {
+        const text = 'Тест MAX: сервер онлайн ✅';
+        await sendMaxAdmin(text);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'MAX send failed' });
+    }
 });
 
 app.get('/api/bot/me', async (req, res) => {

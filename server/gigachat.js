@@ -4,14 +4,21 @@ const crypto = require('crypto');
 
 function buildAgent() {
   const caPath = process.env.GIGACHAT_CA_CERT_PATH;
+  const caInline = process.env.GIGACHAT_CA_CERT;
+  const insecure = process.env.GIGACHAT_INSECURE_SKIP_VERIFY === '1';
   const agentOptions = {};
-  if (caPath) {
+  if (caInline && caInline.trim()) {
+    agentOptions.ca = caInline;
+  } else if (caPath) {
     try {
       const ca = fs.readFileSync(caPath);
       agentOptions.ca = ca;
     } catch (e) {
       console.error('GIGACHAT_CA_CERT_PATH read error:', e.message);
     }
+  }
+  if (insecure) {
+    agentOptions.rejectUnauthorized = false;
   }
   return Object.keys(agentOptions).length ? new https.Agent(agentOptions) : undefined;
 }
