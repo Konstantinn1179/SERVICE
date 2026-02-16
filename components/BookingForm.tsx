@@ -42,6 +42,7 @@ const BookingForm: React.FC<Props> = ({
   const [selectedRepairs, setSelectedRepairs] = useState<string[]>([]);
   const [selectedMaintenance, setSelectedMaintenance] = useState<string[]>([]);
   const [callbackOnly, setCallbackOnly] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Update fields if initial props change (e.g. after async analysis completes)
   useEffect(() => {
@@ -175,13 +176,24 @@ const BookingForm: React.FC<Props> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (isSubmitting) {
+      return;
+    }
     if (name.length < 2) {
       setError('Пожалуйста, укажите имя.');
       return;
     }
     if (phone.length < 18) { // +7 (XXX) XXX-XX-XX is 18 chars
       setError('Введите полный номер телефона.');
+      return;
+    }
+    if (!licensePlate.trim()) {
+      setError('Укажите гос. номер.');
+      return;
+    }
+    if (!mileage.trim()) {
+      setError('Укажите пробег.');
       return;
     }
     if (!agreed) {
@@ -199,6 +211,7 @@ const BookingForm: React.FC<Props> = ({
       }
     }
 
+    setIsSubmitting(true);
     setError('');
     const chatId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     const params = new URLSearchParams(window.location.search);
@@ -209,8 +222,11 @@ const BookingForm: React.FC<Props> = ({
   const submitDisabled =
     name.length < 2 ||
     phone.length < 18 ||
+    !licensePlate.trim() ||
+    !mileage.trim() ||
     !agreed ||
-    (!callbackOnly && (!bookingDate || !bookingTime));
+    (!callbackOnly && (!bookingDate || !bookingTime)) ||
+    isSubmitting;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto">
@@ -226,10 +242,12 @@ const BookingForm: React.FC<Props> = ({
               <div className="bg-gray-900 w-full max-w-md h-[75vh] sm:h-auto sm:max-h-[80vh] rounded-t-2xl sm:rounded-2xl flex flex-col shadow-2xl border border-red-700 animate-slide-up">
                 <div className="flex items-center justify-between p-4 border-b border-gray-800">
                   <h3 className="text-lg font-bold text-white">Выберите неисправность</h3>
-                  <button onClick={() => setShowRepairOverlay(false)} className="text-gray-400 hover:text-white p-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                  <button
+                    type="button"
+                    onClick={() => setShowRepairOverlay(false)}
+                    className="text-xs font-bold text-yellow-300 hover:text-white px-3 py-1 rounded-full border border-yellow-400/60 bg-yellow-500/10 hover:bg-yellow-500/20 transition-colors"
+                  >
+                    ГОТОВО
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
@@ -262,7 +280,7 @@ const BookingForm: React.FC<Props> = ({
                   </div>
                 </div>
                 <div className="p-3 bg-gray-950 text-center text-[10px] text-gray-600 rounded-b-xl sm:rounded-b-2xl">
-                  Можно выбрать несколько пунктов, затем закрыть окно
+                  Можно выбрать несколько пунктов, затем нажать «ГОТОВО»
                 </div>
               </div>
             </div>
@@ -272,10 +290,12 @@ const BookingForm: React.FC<Props> = ({
               <div className="bg-gray-900 w-full max-w-md h-[75vh] sm:h-auto sm:max-h-[80vh] rounded-t-2xl sm:rounded-2xl flex flex-col shadow-2xl border border-green-700 animate-slide-up">
                 <div className="flex items-center justify-between p-4 border-b border-gray-800">
                   <h3 className="text-lg font-bold text-white">Выберите ТО/обслуживание</h3>
-                  <button onClick={() => setShowMaintenanceOverlay(false)} className="text-gray-400 hover:text-white p-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                  <button
+                    type="button"
+                    onClick={() => setShowMaintenanceOverlay(false)}
+                    className="text-xs font-bold text-yellow-300 hover:text-white px-3 py-1 rounded-full border border-yellow-400/60 bg-yellow-500/10 hover:bg-yellow-500/20 transition-colors"
+                  >
+                    ГОТОВО
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
@@ -308,7 +328,7 @@ const BookingForm: React.FC<Props> = ({
                   </div>
                 </div>
                 <div className="p-3 bg-gray-950 text-center text-[10px] text-gray-600 rounded-b-xl sm:rounded-b-2xl">
-                  Можно выбрать несколько пунктов, затем закрыть окно
+                  Можно выбрать несколько пунктов, затем нажать «ГОТОВО»
                 </div>
               </div>
             </div>
@@ -586,7 +606,7 @@ const BookingForm: React.FC<Props> = ({
                 className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
               />
               <label htmlFor="callback-only" className="ml-2 text-xs text-gray-400">
-                Нужен обратный звонок, дату и время согласовать по телефону
+                НУЖЕН ОБРАТНЫЙ ЗВОНОК
               </label>
             </div>
 

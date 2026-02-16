@@ -277,7 +277,8 @@ if (bot) {
 
             // If it was a client action, notify Admin
             if (isClientAction && process.env.ADMIN_CHAT_ID) {
-                const adminMsg = `🔔 <b>Обновление статуса</b>\nКлиент изменил статус заявки #${bookingId}.\nНовый статус: ${statusText}`;
+                const extraDetails = originalText ? `\n\n<b>Детали заявки:</b>\n${originalText}` : '';
+                const adminMsg = `🔔 <b>Обновление статуса</b>\nКлиент изменил статус заявки #${bookingId}.\nНовый статус: ${statusText}${extraDetails}`;
                 bot.sendMessage(process.env.ADMIN_CHAT_ID, adminMsg, { parse_mode: 'HTML' });
                 const plainForMax = adminMsg.replace(/<[^>]+>/g, '');
                 sendMaxAdmin(plainForMax);
@@ -557,7 +558,8 @@ const sendMaxMessage = async ({ chatId, userId, text }) => {
 const sendMaxAdmin = async (text) => {
     try {
         const webAppUrl = process.env.WEB_APP_URL || 'https://lasermehanizm.tb.ru';
-        const calendarUrl = `${webAppUrl}/admin/calendar?platform=max`;
+        const baseUrl = webAppUrl.replace(/\/+$/, '');
+        const calendarUrl = `${baseUrl}/admin/calendar?platform=max`;
         const fullText = `${text}\n\nОткрыть календарь администратора:\n${calendarUrl}`;
 
         const raw = (process.env.MAX_ADMIN_USER_ID || '')
@@ -703,6 +705,9 @@ app.post('/api/bookings', async (req, res) => {
     // Basic validation
     if (!name || !phone) {
         return res.status(400).json({ error: 'Имя и телефон обязательны' });
+    }
+    if (!license_plate || !mileage) {
+        return res.status(400).json({ error: 'Гос. номер и пробег обязательны' });
     }
 
     if (!isCallbackOnly && booking_date) {
