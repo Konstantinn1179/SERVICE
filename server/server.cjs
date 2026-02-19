@@ -1,8 +1,11 @@
 
 const path = require('path');
+const crypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const db = require('./db'); // Import PostgreSQL connection
 const { google } = require('googleapis');
@@ -101,8 +104,31 @@ const getMaxApi = async () => {
 };
 
 const app = express();
-app.use(express.json());
-app.use(cors()); // Enable CORS early
+
+// Security middlewares
+app.use(helmet());
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+app.use(cors());
+
+// Rate limiting
+const aiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const adminLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use('/api/ai-proxy', aiLimiter);
+app.use('/api/admin', adminLimiter);
+
 const PORT = process.env.PORT || 5000;
 
 // LOGGING MIDDLEWARE
@@ -153,6 +179,17 @@ if (supabaseUrl && supabaseKey) {
 } else {
     console.warn("SUPABASE_URL или SUPABASE_SERVICE_ROLE_KEY отсутствуют. Функции базы данных не будут работать.");
 }
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        time: new Date().toISOString(),
+        supabase: Boolean(supabase),
+        telegramBot: Boolean(bot),
+        maxBotToken: Boolean(process.env.MAX_BOT_TOKEN),
+    });
+});
 
 // Initialize Telegram Bot for notifications
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -866,7 +903,7 @@ app.post('/api/bookings', async (req, res) => {
 });
 
 // Get all bookings for Admin Calendar
-app.get('/api/admin/bookings', async (req, res) => {
+app.get('/api/admin/bookings', requireAdminForBookings, async (req, res) => {
     let data = [];
     let dbSuccess = false;
 
@@ -989,7 +1026,7 @@ app.get('/api/admin/bookings', async (req, res) => {
 });
 
 // Update booking status
-app.put('/api/admin/bookings/:id', async (req, res) => {
+app.put('/api/admin/bookings/:id', requireAdminForBookings, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body; // 'confirmed', 'cancelled', 'completed'
 
@@ -1051,20 +1088,301 @@ app.get('/api/test-db', async (req, res) => {
     res.json({ message: "Connected to Supabase!", data });
 });
 
-// Telegram Auth Check Endpoint (Placeholder)
+function verifyTelegramWebAppData(rawInitData) {
+    if (!rawInitData || typeof rawInitData !== 'string') return null;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) return null;
+
+    const urlParams = new URLSearchParams(rawInitData);
+    const hash = urlParams.get('hash');
+    if (!hash) return null;
+
+    const dataCheck = [];
+    urlParams.forEach((value, key) => {
+        if (key === 'hash') return;
+        dataCheck.push(`${key}=${value}`);
+    });
+    dataCheck.sort();
+    const dataCheckString = dataCheck.join('\n');
+
+    const secretKey = crypto
+        .createHmac('sha256', 'WebAppData')
+        .update(botToken)
+        .digest();
+
+    const computedHash = crypto
+        .createHmac('sha256', secretKey)
+        .update(dataCheckString)
+        .digest('hex');
+
+    if (computedHash !== hash) return null;
+
+    const authDateStr = urlParams.get('auth_date');
+    if (authDateStr) {
+        const authDate = parseInt(authDateStr, 10);
+        const now = Math.floor(Date.now() / 1000);
+        const maxAge = 24 * 60 * 60;
+        if (Number.isFinite(authDate) && now - authDate > maxAge) {
+            return null;
+        }
+    }
+
+    let user = null;
+    const userStr = urlParams.get('user');
+    if (userStr) {
+        try {
+            user = JSON.parse(userStr);
+        } catch {
+            user = null;
+        }
+    }
+
+    return { user };
+}
+
+async function saveChatLog({ platform, role, text, userId, sessionId, source, meta }) {
+    try {
+        if (!text || typeof text !== 'string' || !role) return false;
+
+        const safeText = text.length > 2000 ? text.slice(0, 2000) : text;
+        const safePlatform = platform || null;
+        const safeSource = source || null;
+        const safeSessionId = sessionId || null;
+        const safeUserId = userId ? Number(userId) : null;
+        const safeMeta = meta && typeof meta === 'object' ? meta : null;
+
+        let saved = false;
+
+        // PostgreSQL (primary, if configured)
+        try {
+            if (process.env.DATABASE_URL) {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS chat_logs (
+                        id SERIAL PRIMARY KEY,
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        platform TEXT,
+                        role TEXT,
+                        text TEXT,
+                        user_id BIGINT,
+                        session_id TEXT,
+                        source TEXT,
+                        meta JSONB
+                    );
+                `);
+
+                await db.query(
+                    'INSERT INTO chat_logs (platform, role, text, user_id, session_id, source, meta) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+                    [
+                        safePlatform,
+                        role,
+                        safeText,
+                        safeUserId,
+                        safeSessionId,
+                        safeSource,
+                        safeMeta ? JSON.stringify(safeMeta) : null,
+                    ]
+                );
+                saved = true;
+            }
+        } catch (e) {
+            console.error('Chat log Postgres error:', e && e.message);
+        }
+
+        // Supabase fallback
+        if (!saved && supabase) {
+            try {
+                const { error } = await supabase.from('chat_logs').insert([
+                    {
+                        platform: safePlatform,
+                        role,
+                        text: safeText,
+                        user_id: safeUserId,
+                        session_id: safeSessionId,
+                        source: safeSource,
+                        meta: safeMeta,
+                    },
+                ]);
+                if (error) {
+                    console.error('Chat log Supabase error:', error.message);
+                } else {
+                    saved = true;
+                }
+            } catch (e) {
+                console.error('Chat log Supabase error:', e && e.message);
+            }
+        }
+
+        return saved;
+    } catch (e) {
+        console.error('Chat log general error:', e && e.message);
+        return false;
+    }
+}
+
+function isTelegramAdminFromRequest(req) {
+    try {
+        const header = req.headers['x-telegram-init-data'];
+        const rawInitData = Array.isArray(header) ? header[0] : header;
+        if (!rawInitData) return false;
+
+        const result = verifyTelegramWebAppData(rawInitData);
+        if (!result || !result.user || !result.user.id) return false;
+
+        const adminIdEnv = process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_ADMIN_ID;
+        if (!adminIdEnv) return false;
+
+        return String(result.user.id) === String(adminIdEnv);
+    } catch (e) {
+        console.error('Telegram admin check failed:', e && e.message);
+        return false;
+    }
+}
+
+function isMaxAdminFromRequest(req) {
+    try {
+        const raw = (process.env.MAX_ADMIN_USER_ID || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
+        const idList = raw.filter(v => /^\d+$/.test(v));
+
+        const header = req.headers['x-max-admin-user-id'];
+        const headerId = Array.isArray(header) ? header[0] : header;
+        if (!headerId) return false;
+
+        return idList.includes(String(headerId));
+    } catch (e) {
+        console.error('MAX admin check failed:', e && e.message);
+        return false;
+    }
+}
+
+function requireAdminForBookings(req, res, next) {
+    try {
+        const okTelegram = isTelegramAdminFromRequest(req);
+        const okMax = isMaxAdminFromRequest(req);
+
+        if (okTelegram || okMax) {
+            return next();
+        }
+
+        return res.status(403).json({ error: 'ADMIN_ONLY' });
+    } catch (e) {
+        console.error('Admin middleware error:', e && e.message);
+        return res.status(500).json({ error: 'ADMIN_CHECK_ERROR' });
+    }
+}
+
 app.post('/api/auth/telegram', (req, res) => {
-    // TODO: Implement real hash verification
-    const { initData } = req.body;
-    console.log("Received initData:", initData);
-    
-    // Mock success for now
-    res.json({ success: true, user: { id: 12345, name: "Test User" } });
+    try {
+        const { initData } = req.body || {};
+        const result = verifyTelegramWebAppData(initData);
+        if (!result || !result.user || !result.user.id) {
+            return res.status(401).json({ success: false, error: 'INVALID_INIT_DATA' });
+        }
+
+        const adminIdEnv = process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_ADMIN_ID;
+        const isAdmin =
+            !!adminIdEnv && String(result.user.id) === String(adminIdEnv);
+
+        return res.json({
+            success: true,
+            user: {
+                id: result.user.id,
+                first_name: result.user.first_name || '',
+                username: result.user.username || '',
+            },
+            isAdmin,
+        });
+    } catch (e) {
+        console.error('Telegram auth error:', e && e.message);
+        return res.status(500).json({ success: false, error: 'AUTH_ERROR' });
+    }
 });
+
+app.post('/api/chat/log', async (req, res) => {
+    try {
+        const { role, text, platform, sessionId, source, meta } = req.body || {};
+        if (!role || !text || typeof text !== 'string') {
+            return res.status(400).json({ success: false, error: 'INVALID_PAYLOAD' });
+        }
+
+        let userId = null;
+        const header = req.headers['x-telegram-init-data'];
+        const rawInitData = Array.isArray(header) ? header[0] : header;
+        if (rawInitData) {
+            const result = verifyTelegramWebAppData(rawInitData);
+            if (result && result.user && result.user.id) {
+                userId = result.user.id;
+            }
+        }
+
+        const saved = await saveChatLog({
+            platform,
+            role,
+            text,
+            userId,
+            sessionId,
+            source,
+            meta,
+        });
+
+        return res.json({ success: true, saved: Boolean(saved) });
+    } catch (e) {
+        console.error('Chat log route error:', e && e.message);
+        return res.status(500).json({ success: false, error: 'CHAT_LOG_ERROR' });
+    }
+});
+
+const MAX_AI_INPUT_LENGTH = 2000;
+const BLOCKED_INPUT_PATTERNS = [
+    /api[-\s]?key/i,
+    /token/i,
+    /парол/i,
+    /взлом/i,
+    /sql injection/i,
+    /инъекци/i,
+    /эксплойт/i
+];
+const BLOCKED_OUTPUT_PATTERNS = [
+    /api[-\s]?key/i,
+    /token/i,
+    /парол/i,
+    /sql injection/i,
+    /как взломать/i,
+    /как украсть/i
+];
+
+function sanitizeUserText(text) {
+    if (!text || typeof text !== "string") return "";
+    let trimmed = text.trim();
+    if (!trimmed) return "";
+    if (trimmed.length > MAX_AI_INPUT_LENGTH) {
+        trimmed = trimmed.slice(0, MAX_AI_INPUT_LENGTH);
+    }
+    for (const pattern of BLOCKED_INPUT_PATTERNS) {
+        if (pattern.test(trimmed)) {
+            return null;
+        }
+    }
+    return trimmed;
+}
+
+function moderateModelText(text) {
+    if (!text || typeof text !== "string") return "";
+    for (const pattern of BLOCKED_OUTPUT_PATTERNS) {
+        if (pattern.test(text)) {
+            return "Запрос обработан с ограничениями безопасности. Я не могу обсуждать подобные детали. Давайте вернёмся к вопросам по обслуживанию автомобиля и записи в автосервис.";
+        }
+    }
+    return text;
+}
 
 app.post('/api/ai-proxy', async (req, res) => {
     try {
         const { model, config, contents } = req.body;
         let messages = [];
+        let blocked = false;
         if (config && config.systemInstruction) {
             messages.push({ role: "system", content: config.systemInstruction });
         }
@@ -1073,16 +1391,31 @@ app.post('/api/ai-proxy', async (req, res) => {
                 const role = item.role === 'model' ? 'assistant' : 'user';
                 const text = item.parts && item.parts[0] ? item.parts[0].text : '';
                 if (text) {
-                    messages.push({ role, content: text });
+                    if (role === "user") {
+                        const sanitized = sanitizeUserText(text);
+                        if (sanitized === null) {
+                            blocked = true;
+                        } else if (sanitized) {
+                            messages.push({ role, content: sanitized });
+                        }
+                    } else {
+                        messages.push({ role, content: text });
+                    }
                 }
+            });
+        }
+        if (blocked) {
+            return res.json({
+                text: "Запрос отклонён системой безопасности. Я могу помогать только с вопросами по автосервису, диагностике и записи на обслуживание."
             });
         }
         if (process.env.GIGACHAT_AUTH_KEY) {
             try {
                 const { getChatCompletionText } = require('./gigachat');
                 const text = await getChatCompletionText(messages, model);
+                const safeText = moderateModelText(text);
                 if (text) {
-                    return res.json({ text });
+                    return res.json({ text: safeText });
                 }
             } catch (e) {
                 console.error("GigaChat Error:", e);
@@ -1106,8 +1439,10 @@ app.post('/api/ai-proxy', async (req, res) => {
                  text = jsonMatch[1];
              }
 
+             const safeText = moderateModelText(text);
+
              return res.json({
-                 text: text
+                 text: safeText
              });
         }
 
@@ -1137,7 +1472,9 @@ app.post('/api/ai-proxy', async (req, res) => {
                  text = text.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
             }
 
-            return res.json({ text: text });
+            const safeText = moderateModelText(text);
+
+            return res.json({ text: safeText });
         }
 
         throw new Error("No AI client configured (Check OPENROUTER_API_KEY or VITE_API_KEY)");

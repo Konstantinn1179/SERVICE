@@ -6,6 +6,7 @@ interface Props {
   status: StatusColor;
   branch: BranchType;
   onInfoClick?: () => void;
+  isAdmin?: boolean;
 }
 
 const colorMap: Record<StatusColor, string> = {
@@ -24,15 +25,12 @@ const textMap: Record<StatusColor, string> = {
   black: 'ОТКАЗ'
 };
 
-const StatusHeader: React.FC<Props> = ({ status, branch, onInfoClick }) => {
+const StatusHeader: React.FC<Props> = ({ status, branch, onInfoClick, isAdmin: isAdminProp }) => {
   const params = new URLSearchParams(window.location.search);
   const platform = params.get('platform') || undefined;
   const adminUrl = platform ? `/admin?platform=${platform}` : '/admin';
-  const adminIdEnv = (import.meta as any).env?.VITE_ADMIN_CHAT_ID as string | undefined;
-  const tgId = window?.Telegram?.WebApp?.initDataUnsafe?.user?.id?.toString();
   const isAdminParam = params.get('admin') === '1';
-  const isAdminEnvMatch = !!adminIdEnv && !!tgId && adminIdEnv === tgId;
-  const isAdmin = isAdminParam || isAdminEnvMatch;
+  const isAdmin = Boolean(isAdminParam || isAdminProp);
   return (
     <div className="flex items-center justify-between bg-gray-900 border-b border-gray-800 p-3 sm:p-4 sticky top-0 z-20">
       <div className="flex items-center space-x-3">

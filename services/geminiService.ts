@@ -75,7 +75,10 @@ export const generateChatResponse = async (history: Message[], isFirstMessage: b
      prompt = history[history.length - 1].text;
   }
 
-  const previousHistory = isFirstMessage ? [] : formatHistory(history.slice(0, -1));
+  // Limit history length to reduce token usage
+  const MAX_HISTORY_MESSAGES = 16; // pairs of user/assistant approximated by messages count
+  const startIndex = Math.max(0, history.length - MAX_HISTORY_MESSAGES - 1);
+  const previousHistory = isFirstMessage ? [] : formatHistory(history.slice(startIndex, -1));
 
   const runGeneration = async () => {
     // Call our own backend proxy instead of Google directly

@@ -29,6 +29,14 @@ interface CalendarEvent {
   reason?: string;
 }
 
+const getTelegramInitData = (): string | undefined => {
+  try {
+    return (window as any).Telegram?.WebApp?.initData as string | undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const AdminCalendar: React.FC = () => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [view, setView] = useState<View>(Views.WEEK);
@@ -39,7 +47,12 @@ const AdminCalendar: React.FC = () => {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/bookings');
+      const initData = getTelegramInitData();
+      const headers: Record<string, string> = {};
+      if (initData) {
+        headers['x-telegram-init-data'] = initData;
+      }
+      const response = await fetch('/api/admin/bookings', { headers });
       if (!response.ok) {
         throw new Error('Failed to fetch bookings');
       }
@@ -81,9 +94,14 @@ const AdminCalendar: React.FC = () => {
   // Update status handler
   const handleStatusUpdate = async (id: number, newStatus: string) => {
     try {
+        const initData = getTelegramInitData();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (initData) {
+          headers['x-telegram-init-data'] = initData;
+        }
         const response = await fetch(`/api/admin/bookings/${id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ status: newStatus })
         });
         

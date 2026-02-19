@@ -78,20 +78,74 @@ function App() {
   
   const [isListening, setIsListening] = useState(false);
   const [menuExpanded, setMenuExpanded] = useState(() => !isChat);
+  const [authUser, setAuthUser] = useState<{ id: number; firstName?: string; isAdmin?: boolean } | null>(null);
+  const sessionIdRef = useRef<string>(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const telegram = window.Telegram?.WebApp;
 
+  const detectPlatform = () => {
+    if (platformParam === 'max') return 'max';
+    if (telegram) return 'telegram';
+    return 'web';
+  };
+
+  const logChatEvent = (role: 'user' | 'assistant', text: string, source: 'static' | 'llm' | 'booking' | 'menu') => {
+    try {
+      if (!text || !text.trim()) return;
+      const payload = {
+        role,
+        text,
+        platform: detectPlatform(),
+        sessionId: sessionIdRef.current,
+        source,
+      };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const initData = (telegram as any)?.initData as string | undefined;
+      if (initData) {
+        headers['x-telegram-init-data'] = initData;
+      }
+      fetch('/api/chat/log', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    } catch {
+      // Ошибки логирования не должны ломать чат
+    }
+  };
+
   // Initialize Chat & Telegram
   useEffect(() => {
-    // 1. Initialize Telegram Web App
     if (telegram) {
         telegram.ready();
         telegram.expand(); // Open full screen
-        
-        // Disable vertical swipes to prevent accidental closing on some devices
-        // (Note: full swipe prevention requires more CSS/JS, but expand helps)
+
+        const authTelegram = async () => {
+          try {
+            const initData = (telegram as any).initData as string | undefined;
+            if (!initData) return;
+            const response = await fetch('/api/auth/telegram', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ initData }),
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data && data.success && data.user) {
+              setAuthUser({
+                id: data.user.id,
+                firstName: data.user.first_name,
+                isAdmin: !!data.isAdmin,
+              });
+            }
+          } catch (e) {
+            console.error('Telegram auth failed', e);
+          }
+        };
+
+        authTelegram();
     }
 
     // 2. Initialize AI Chat
@@ -103,7 +157,6 @@ function App() {
         setMessages([newMsg]);
         parseStatusFromText(text);
 
-        // Optional: Pre-fill user name if available from Telegram
         if (telegram?.initDataUnsafe?.user?.first_name) {
            console.log("User detected:", telegram.initDataUnsafe.user.first_name);
         }
@@ -151,6 +204,8 @@ function App() {
         setMessages(prev => [...prev, userMsg, botMsg]);
         parseStatusFromText(STATIC_ANSWERS[text]);
         setInputValue('');
+        logChatEvent('user', text, 'static');
+        logChatEvent('assistant', STATIC_ANSWERS[text], 'static');
         // We do not set isLoading(true) here, creating an "instant" feel
         return;
     }
@@ -159,9 +214,27 @@ function App() {
     const userMsg: Message = { role: 'user', text, timestamp: new Date() };
     const updatedHistory = [...messages, userMsg];
     setMessages(updatedHistory);
+    logChatEvent('user', text, 'llm');
     setInputValue('');
     setIsLoading(true);
     setQuickButtons([]); // Clear buttons while thinking
+
+    // Hard cap on number of user turns to prevent "душнила" и лишние токены
+    const MAX_USER_TURNS = 12;
+    const userTurnsCount = updatedHistory.filter(m => m.role === 'user').length;
+    if (userTurnsCount > MAX_USER_TURNS) {
+      const capMsg: Message = {
+        role: 'model',
+        text: '[STATUS: blue] Мы уже подробно обсудили вопрос. Предлагаю записаться: нажмите «ЗАПИСАТЬСЯ» ниже, или я могу соединить со специалистом.',
+        timestamp: new Date()
+      };
+      const finalHistoryCap = [...updatedHistory, capMsg];
+      setMessages(finalHistoryCap);
+      setBookingReady(true);
+      setShowBookingForm(true);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       // 2. Start Background Tasks in PARALLEL
@@ -206,6 +279,7 @@ function App() {
       const botMsg: Message = { role: 'model', text: responseText, timestamp: new Date() };
       const finalHistory = [...updatedHistory, botMsg];
       setMessages(finalHistory);
+      logChatEvent('assistant', responseText, 'llm');
 
       // 4. Generate Buttons (DISABLED as per request to speed up)
       // generateButtons(finalHistory).then(setQuickButtons).catch(err => console.error("Buttons task failed", err));
@@ -270,6 +344,7 @@ function App() {
   const handleMenuSelection = (fullText: string, rawItem?: string, type?: string) => {
     // 1. Send message to chat (triggers AI analysis as well)
     handleSendMessage(fullText);
+    logChatEvent('user', fullText, 'menu');
 
     // 2. Direct update for explicit UI selections (Repair/Maintenance)
     if (rawItem && (type === 'repair' || type === 'maintenance')) {
@@ -349,6 +424,7 @@ function App() {
          status={status} 
          branch={branch} 
          onInfoClick={() => setShowMobileInfo(true)} 
+         isAdmin={authUser?.isAdmin}
       />
 
       {isAdminPlatform && (
